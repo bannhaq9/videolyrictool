@@ -1,0 +1,6 @@
+{
+  "name": "Lyric Video Studio",
+  "description": "Công cụ tạo lyric video: ghép ảnh/video, thêm nhạc, tạo lời bài hát chạy karaoke và xuất video chất lượng cao.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
