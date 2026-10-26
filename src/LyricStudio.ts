@@ -30,7 +30,54 @@ export function initStudio() {
   };
   const FONTS = ['Be Vietnam Pro', 'Montserrat', 'Playfair Display', 'Oswald', 'Quicksand', 'Dancing Script', 'Lobster', 'Pacifico'];
   const FX: Record<string, string> = { none: 'Đứng yên', zoomin: 'Zoom vào', zoomout: 'Zoom ra', panl: 'Lướt sang trái', panr: 'Lướt sang phải' };
-  const TR: Record<string, string> = { fade: 'Mờ dần', slide: 'Trượt', zoom: 'Phóng to', none: 'Cắt thẳng' };
+  const TR_GROUPS = [
+    {
+      group: 'Cơ bản',
+      items: [
+        { key: 'none', label: 'Cắt thẳng' },
+        { key: 'fade', label: 'Mờ dần' },
+        { key: 'slide', label: 'Trượt' },
+        { key: 'push', label: 'Trượt đẩy' },
+        { key: 'zoom', label: 'Phóng to' },
+        { key: 'zoomout', label: 'Zoom ra' }
+      ]
+    },
+    {
+      group: 'Quét',
+      items: [
+        { key: 'wiper', label: 'Quét sang phải' },
+        { key: 'wipel', label: 'Quét sang trái' },
+        { key: 'wipeu', label: 'Quét lên' },
+        { key: 'wiped', label: 'Quét xuống' },
+        { key: 'circleopen', label: 'Mở vòng tròn' },
+        { key: 'circleclose', label: 'Thu vòng tròn' }
+      ]
+    },
+    {
+      group: 'Hiệu ứng mạnh',
+      items: [
+        { key: 'spin', label: 'Xoay nhẹ và mờ' },
+        { key: 'flip', label: 'Lật trang' },
+        { key: 'flash', label: 'Chớp trắng' },
+        { key: 'blur', label: 'Nhòe rồi rõ' },
+        { key: 'glitch', label: 'Nhiễu RGB' },
+        { key: 'mosaic', label: 'Hạt nhỏ (mosaic)' },
+        { key: 'random', label: 'Ngẫu nhiên' }
+      ]
+    }
+  ];
+  const TR: Record<string, string> = {};
+  TR_GROUPS.forEach(g => g.items.forEach(it => { TR[it.key] = it.label; }));
+  const CONCRETE_TR = [
+    'fade', 'slide', 'push', 'zoom', 'zoomout',
+    'wiper', 'wipel', 'wipeu', 'wiped', 'circleopen', 'circleclose',
+    'spin', 'flip', 'flash', 'blur', 'glitch', 'mosaic'
+  ];
+  function getEffectiveTr(trName: string, clipId: number, index: number): string {
+    if (trName !== 'random') return trName;
+    const idx = Math.abs((clipId * 9301 + 49297 + index * 233) % CONCRETE_TR.length);
+    return CONCRETE_TR[idx];
+  }
   const COL: Record<string, string> = { none: 'Gốc', warm: 'Ấm', cool: 'Lạnh', bw: 'Đen trắng', punch: 'Rực rỡ' };
   const FILTERS: Record<string, string> = {
     none: 'none',
@@ -70,12 +117,22 @@ export function initStudio() {
     size?: number;
   }
 
+  interface AudioBlock {
+    id: number;
+    start: number; // timeline start (seconds)
+    srcIn: number; // slice start in audio file (seconds)
+    srcOut: number; // slice end in audio file (seconds)
+    dur: number; // duration (srcOut - srcIn)
+  }
+
   const S = {
     orient: 'v',
     res: 720,
     clips: [] as Clip[],
     sel: null as number | null,
     selLyrId: null as number | null,
+    audioBlocks: [] as AudioBlock[],
+    selAudioId: null as number | null,
     t: 0,
     playing: false,
     sample: true,
@@ -98,7 +155,7 @@ export function initStudio() {
       anim: 'fade' as 'fade' | 'rise' | 'pop' | 'type' | 'slide'
     },
     title: { text: '', dur: 3 },
-    def: { dur: 4, fit: 'cover', fx: 'zoomin', tr: 'fade' },
+    def: { dur: 4, fit: 'cover', fx: 'zoomin', tr: 'fade', trDur: 0.6 },
     syncWithMusic: false,
     syncMusicMode: 'even' as 'even' | 'extendLast',
     speed: 1.0,
@@ -129,7 +186,7 @@ export function initStudio() {
     start: 0,
     end: 0,
     fadeIn: 0,
-    fadeOut: 1.5,
+    fadeOut: 1,
     wfZoom: 1,
     fade: true,
     ctx: null as AudioContext | null,
@@ -152,7 +209,7 @@ export function initStudio() {
   (A.el as any).webkitPreservesPitch = true;
   (A.el as any).mozPreservesPitch = true;
 
-  let uid = 0, lyrUid = 0, raf = 0, t0 = 0, tbase = 0, endCb: (() => Promise<void> | void) | null = null,
+  let uid = 0, lyrUid = 0, audioUid = 0, raf = 0, t0 = 0, tbase = 0, endCb: (() => Promise<void> | void) | null = null,
       exporting = false, expCancel = false, expBlob: Blob | null = null, expName = '', expRec: MediaRecorder | null = null;
   const cv: HTMLCanvasElement = $('#cv'), ctx = cv.getContext('2d')!;
   const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
@@ -210,73 +267,70 @@ export function initStudio() {
       fit: S.def.fit,
       fx: S.def.fx,
       tr: S.def.tr,
-      trDur: 0.6,
+      trDur: S.def.trDur || 0.6,
       color: 'none',
       thumb: '',
       sample: false
     }, o) as Clip;
   }
+  const audioTrackEnd = () => {
+    if (!A.loaded || !S.audioBlocks.length) return 0;
+    return S.audioBlocks.reduce((max, b) => Math.max(max, b.start + b.dur), 0);
+  };
+
   const musicDuration = () => {
-    if (!A.loaded || A.dur <= 0) return 0;
-    const end = A.end > A.start ? A.end : A.dur;
-    return Math.max(0, end - A.start);
+    return audioTrackEnd();
   };
 
   const total = () => {
-    if (S.syncWithMusic && A.loaded && musicDuration() > 0) {
-      return Math.max(0.5, musicDuration());
+    if (A.loaded && S.audioBlocks.length > 0) {
+      const aEnd = audioTrackEnd();
+      if (aEnd > 0) return Math.max(0.5, aEnd);
     }
-    return S.clips.reduce((a, c) => a + c.dur, 0);
+    return Math.max(0.5, S.clips.reduce((a, c) => a + c.dur, 0));
   };
 
-  function applyMusicSync(showToast = false) {
-    if (!S.syncWithMusic) return;
-    const mDur = musicDuration();
-    if (!A.loaded || mDur <= 0) {
-      if (showToast) toast('Chưa có nhạc hoặc đoạn chọn không hợp lệ. Hãy chọn file nhạc trước.');
-      return;
-    }
-    const targetTotal = Math.max(0.5, mDur);
-    if (!S.clips.length) return;
-
+  function autoFitImagesToMusic(showToast = false) {
+    if (!A.loaded || !S.audioBlocks.length) return;
+    const targetTotal = total();
     const imgs = S.clips.filter(c => c.type === 'image');
-    if (!imgs.length) {
-      if (showToast) toast('Không có ảnh nào để căn theo độ dài bài hát.');
-      return;
-    }
+    if (!imgs.length) return;
 
     const vids = S.clips.filter(c => c.type === 'video');
     const vidsDur = vids.reduce((a, c) => a + c.dur, 0);
 
-    if (S.syncMusicMode === 'even') {
-      const rem = targetTotal - vidsDur;
-      if (rem <= 0) {
-        if (showToast) toast('Đoạn nhạc chọn ngắn hơn tổng các đoạn video đã có.');
-        return;
+    const rem = targetTotal - vidsDur;
+    if (rem <= 0) return;
+
+    const each = rem / imgs.length;
+    let accum = 0;
+    imgs.forEach((c, idx) => {
+      if (idx === imgs.length - 1) {
+        c.dur = Math.max(0.3, Math.round((rem - accum) * 100) / 100);
+      } else {
+        const d = Math.max(0.3, Math.round(each * 100) / 100);
+        c.dur = d;
+        accum += d;
       }
-      const each = rem / imgs.length;
-      let accum = 0;
-      imgs.forEach((c, idx) => {
-        if (idx === imgs.length - 1) {
-          c.dur = Math.max(0.3, Math.round((rem - accum) * 100) / 100);
-        } else {
-          const d = Math.max(0.3, Math.round(each * 100) / 100);
-          c.dur = d;
-          accum += d;
-        }
-      });
-      if (showToast) toast('Ảnh đã được tự chia đều theo đoạn nhạc đã chọn (' + fmt(targetTotal) + ').');
-    } else {
-      // 'extendLast': Ảnh cuối kéo dài cho tới hết đoạn nhạc
-      const lastImg = [...S.clips].reverse().find(c => c.type === 'image');
-      if (lastImg) {
-        const otherDur = S.clips.filter(c => c !== lastImg).reduce((a, c) => a + c.dur, 0);
-        const lastDur = Math.max(0.3, Math.round((targetTotal - otherDur) * 100) / 100);
-        lastImg.dur = lastDur;
-        if (showToast) toast('Ảnh cuối (' + lastImg.name + ') đã kéo dài cho tới hết đoạn nhạc (' + fmt(targetTotal) + ').');
+    });
+    if (showToast) toast('Độ dài video tự khớp với đoạn nhạc (' + fmt(targetTotal) + ').');
+  }
+
+  function applyMusicSync(showToast = false) {
+    autoFitImagesToMusic(showToast);
+    refreshAll();
+  }
+
+  function getActiveAudioAt(t: number): { block: AudioBlock; fileSec: number } | null {
+    if (!A.loaded || !S.audioBlocks.length) return null;
+    for (const b of S.audioBlocks) {
+      if (t >= b.start && t < b.start + b.dur) {
+        const offset = t - b.start;
+        const fileSec = b.srcIn + offset;
+        return { block: b, fileSec };
       }
     }
-    refreshAll();
+    return null;
   }
   function locate(t: number) {
     let a = 0;
@@ -340,9 +394,13 @@ export function initStudio() {
     if (!S.sample) return;
     S.sample = false;
     S.clips = S.clips.filter(c => !c.sample);
-    if ($('#lyr').value.trim() === SAMPLE_LYR) {
-      $('#lyr').value = '';
+    const lyrEl = $('#lyr') as HTMLTextAreaElement | null;
+    if (lyrEl && lyrEl.value.trim() === SAMPLE_LYR) {
+      lyrEl.value = '';
       S.lyr = [];
+      const rawEl = $('#lyrRawInput') as HTMLTextAreaElement | null;
+      if (rawEl) rawEl.value = '';
+      renderLyricUI();
     }
     const sn = $('#sampleNote');
     if (sn) sn.hidden = true;
@@ -364,7 +422,7 @@ export function initStudio() {
     }
     if (n && !S.sel) S.sel = S.clips[0]?.id ?? null;
     if (n) S.sel = S.clips[S.clips.length - 1].id;
-    if (S.syncWithMusic) applyMusicSync();
+    if (A.loaded) autoFitImagesToMusic();
     refreshAll();
   }
   function makeSample(i: number) {
@@ -423,16 +481,28 @@ export function initStudio() {
       S.clips.push(c);
     });
     S.sel = S.clips[0].id;
-    $('#lyr').value = SAMPLE_LYR;
+    const lyrEl = $('#lyr') as HTMLTextAreaElement | null;
+    if (lyrEl) lyrEl.value = SAMPLE_LYR;
     S.lyr = parseLyr(SAMPLE_LYR);
+    const rawEl = $('#lyrRawInput') as HTMLTextAreaElement | null;
+    if (rawEl) rawEl.value = rawLyricLines().join('\n');
+    switchLyricStep(1);
   }
 
-  /* ---------- vẽ khung hình ---------- */
+  /* ---------- vẽ khung hình & hiệu ứng chuyển cảnh ---------- */
   const bgc = document.createElement('canvas'), bgx = bgc.getContext('2d')!;
+  const buf1 = document.createElement('canvas'), bctx1 = buf1.getContext('2d')!;
+  const buf2 = document.createElement('canvas'), bctx2 = buf2.getContext('2d')!;
+  function syncBufSize(W: number, H: number) {
+    if (buf1.width !== W || buf1.height !== H) { buf1.width = W; buf1.height = H; }
+    if (buf2.width !== W || buf2.height !== H) { buf2.width = W; buf2.height = H; }
+  }
+
   function srcSize(el: any) {
     return { w: el.videoWidth || el.naturalWidth || el.width || 1, h: el.videoHeight || el.naturalHeight || el.height || 1 };
   }
-  function drawMedia(c: Clip, local: number, o: { zoom?: number; alpha?: number; dx?: number }) {
+
+  function drawMedia(c: Clip, local: number, o: { zoom?: number; alpha?: number; dx?: number }, targetCtx: CanvasRenderingContext2D = ctx) {
     const W = cv.width, H = cv.height, el = c.el;
     if (!el) return;
     if (c.type === 'video' && el.readyState < 2) return;
@@ -444,33 +514,437 @@ export function initStudio() {
     else if (c.fx === 'panl') { z = 1.1; px = (0.5 - p) * 0.08; }
     else if (c.fx === 'panr') { z = 1.1; px = (p - 0.5) * 0.08; }
     z *= (o.zoom || 1);
-    ctx.save();
-    ctx.globalAlpha = o.alpha == null ? 1 : o.alpha;
-    ctx.translate(W / 2 + (o.dx || 0) + px * W, H / 2);
-    ctx.scale(z, z);
-    ctx.translate(-W / 2, -H / 2);
-    if (c.color !== 'none' && 'filter' in ctx) (ctx as any).filter = FILTERS[c.color];
+    targetCtx.save();
+    targetCtx.globalAlpha = o.alpha == null ? 1 : o.alpha;
+    targetCtx.translate(W / 2 + (o.dx || 0) + px * W, H / 2);
+    targetCtx.scale(z, z);
+    targetCtx.translate(-W / 2, -H / 2);
+    if (c.color !== 'none' && 'filter' in targetCtx) (targetCtx as any).filter = FILTERS[c.color];
     try {
       if (c.fit === 'contain') {
         bgc.width = W > H ? 64 : 36;
         bgc.height = W > H ? 36 : 64;
         const s0 = Math.max(bgc.width / w, bgc.height / h);
         bgx.drawImage(el, (bgc.width - w * s0) / 2, (bgc.height - h * s0) / 2, w * s0, h * s0);
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(bgc, 0, 0, W, H);
-        ctx.fillStyle = 'rgba(0,0,0,.35)';
-        ctx.fillRect(0, 0, W, H);
+        targetCtx.imageSmoothingEnabled = true;
+        targetCtx.imageSmoothingQuality = 'high';
+        targetCtx.drawImage(bgc, 0, 0, W, H);
+        targetCtx.fillStyle = 'rgba(0,0,0,.35)';
+        targetCtx.fillRect(0, 0, W, H);
         const s = Math.min(W / w, H / h);
-        ctx.drawImage(el, (W - w * s) / 2, (H - h * s) / 2, w * s, h * s);
+        targetCtx.drawImage(el, (W - w * s) / 2, (H - h * s) / 2, w * s, h * s);
       } else {
         const s = Math.max(W / w, H / h);
-        ctx.drawImage(el, (W - w * s) / 2, (H - h * s) / 2, w * s, h * s);
+        targetCtx.drawImage(el, (W - w * s) / 2, (H - h * s) / 2, w * s, h * s);
       }
     } catch (e) {}
-    ctx.restore();
+    targetCtx.restore();
   }
+
+  function renderTransition(trType: string, prev: Clip, c: Clip, local: number, trd: number, clipIndex = 0) {
+    const W = cv.width, H = cv.height;
+    syncBufSize(W, H);
+    const p = clamp(local / trd, 0, 1);
+    const k = ease(p);
+    const effTr = getEffectiveTr(trType, c.id || 1, clipIndex);
+
+    if (effTr === 'none') {
+      drawMedia(c, local, {}, ctx);
+      return;
+    }
+    if (effTr === 'fade') {
+      drawMedia(prev, prev.dur, {}, ctx);
+      drawMedia(c, local, { alpha: k }, ctx);
+      return;
+    }
+    if (effTr === 'slide') {
+      drawMedia(prev, prev.dur, { dx: -W * k }, ctx);
+      drawMedia(c, local, { dx: W * (1 - k) }, ctx);
+      return;
+    }
+    if (effTr === 'push') {
+      drawMedia(prev, prev.dur, { dx: -W * k }, ctx);
+      drawMedia(c, local, { dx: W * (1 - k) }, ctx);
+      const seamX = W * (1 - k);
+      ctx.save();
+      const shadowG = ctx.createLinearGradient(seamX - 18, 0, seamX, 0);
+      shadowG.addColorStop(0, 'rgba(0,0,0,0)');
+      shadowG.addColorStop(1, 'rgba(0,0,0,0.45)');
+      ctx.fillStyle = shadowG;
+      ctx.fillRect(seamX - 18, 0, 18, H);
+      ctx.restore();
+      return;
+    }
+    if (effTr === 'zoom') {
+      drawMedia(prev, prev.dur, {}, ctx);
+      drawMedia(c, local, { alpha: k, zoom: 1.35 - 0.35 * k }, ctx);
+      return;
+    }
+    if (effTr === 'zoomout') {
+      drawMedia(prev, prev.dur, { zoom: 1 - 0.25 * k, alpha: 1 - k }, ctx);
+      drawMedia(c, local, { zoom: 1.35 - 0.35 * k, alpha: k }, ctx);
+      return;
+    }
+    if (effTr === 'wiper') {
+      drawMedia(prev, prev.dur, {}, ctx);
+      bctx2.clearRect(0, 0, W, H);
+      drawMedia(c, local, {}, bctx2);
+      const f = Math.max(30, W * 0.06);
+      const sx = -f + (W + f * 2) * k;
+      bctx2.save();
+      bctx2.globalCompositeOperation = 'destination-in';
+      const g = bctx2.createLinearGradient(sx - f, 0, sx + f, 0);
+      g.addColorStop(0, 'rgba(0,0,0,1)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      bctx2.fillStyle = '#000';
+      if (sx - f > 0) bctx2.fillRect(0, 0, sx - f, H);
+      bctx2.fillStyle = g;
+      bctx2.fillRect(Math.max(0, sx - f), 0, f * 2, H);
+      bctx2.restore();
+      ctx.drawImage(buf2, 0, 0);
+      return;
+    }
+    if (effTr === 'wipel') {
+      drawMedia(prev, prev.dur, {}, ctx);
+      bctx2.clearRect(0, 0, W, H);
+      drawMedia(c, local, {}, bctx2);
+      const f = Math.max(30, W * 0.06);
+      const sx = (W + f) - (W + f * 2) * k;
+      bctx2.save();
+      bctx2.globalCompositeOperation = 'destination-in';
+      const g = bctx2.createLinearGradient(sx - f, 0, sx + f, 0);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,1)');
+      bctx2.fillStyle = '#000';
+      if (sx + f < W) bctx2.fillRect(sx + f, 0, W - (sx + f), H);
+      bctx2.fillStyle = g;
+      bctx2.fillRect(Math.max(0, sx - f), 0, f * 2, H);
+      bctx2.restore();
+      ctx.drawImage(buf2, 0, 0);
+      return;
+    }
+    if (effTr === 'wipeu') {
+      drawMedia(prev, prev.dur, {}, ctx);
+      bctx2.clearRect(0, 0, W, H);
+      drawMedia(c, local, {}, bctx2);
+      const f = Math.max(30, H * 0.06);
+      const sy = (H + f) - (H + f * 2) * k;
+      bctx2.save();
+      bctx2.globalCompositeOperation = 'destination-in';
+      const g = bctx2.createLinearGradient(0, sy - f, 0, sy + f);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,1)');
+      bctx2.fillStyle = '#000';
+      if (sy + f < H) bctx2.fillRect(0, sy + f, W, H - (sy + f));
+      bctx2.fillStyle = g;
+      bctx2.fillRect(0, Math.max(0, sy - f), W, f * 2);
+      bctx2.restore();
+      ctx.drawImage(buf2, 0, 0);
+      return;
+    }
+    if (effTr === 'wiped') {
+      drawMedia(prev, prev.dur, {}, ctx);
+      bctx2.clearRect(0, 0, W, H);
+      drawMedia(c, local, {}, bctx2);
+      const f = Math.max(30, H * 0.06);
+      const sy = -f + (H + f * 2) * k;
+      bctx2.save();
+      bctx2.globalCompositeOperation = 'destination-in';
+      const g = bctx2.createLinearGradient(0, sy - f, 0, sy + f);
+      g.addColorStop(0, 'rgba(0,0,0,1)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      bctx2.fillStyle = '#000';
+      if (sy - f > 0) bctx2.fillRect(0, 0, W, sy - f);
+      bctx2.fillStyle = g;
+      bctx2.fillRect(0, Math.max(0, sy - f), W, f * 2);
+      bctx2.restore();
+      ctx.drawImage(buf2, 0, 0);
+      return;
+    }
+    if (effTr === 'circleopen') {
+      drawMedia(prev, prev.dur, {}, ctx);
+      bctx2.clearRect(0, 0, W, H);
+      drawMedia(c, local, {}, bctx2);
+      const maxR = Math.hypot(W / 2, H / 2) * 1.05;
+      const r = maxR * k;
+      const f = 25;
+      bctx2.save();
+      bctx2.globalCompositeOperation = 'destination-in';
+      if (r - f > 0) {
+        bctx2.fillStyle = '#000';
+        bctx2.beginPath();
+        bctx2.arc(W / 2, H / 2, r - f, 0, Math.PI * 2);
+        bctx2.fill();
+      }
+      const g = bctx2.createRadialGradient(W / 2, H / 2, Math.max(0, r - f), W / 2, H / 2, r + f);
+      g.addColorStop(0, 'rgba(0,0,0,1)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      bctx2.fillStyle = g;
+      bctx2.beginPath();
+      bctx2.arc(W / 2, H / 2, r + f, 0, Math.PI * 2);
+      bctx2.fill();
+      bctx2.restore();
+      ctx.drawImage(buf2, 0, 0);
+      return;
+    }
+    if (effTr === 'circleclose') {
+      drawMedia(c, local, {}, ctx);
+      bctx1.clearRect(0, 0, W, H);
+      drawMedia(prev, prev.dur, {}, bctx1);
+      const maxR = Math.hypot(W / 2, H / 2) * 1.05;
+      const r = maxR * (1 - k);
+      const f = 25;
+      if (r > 0) {
+        bctx1.save();
+        bctx1.globalCompositeOperation = 'destination-in';
+        if (r - f > 0) {
+          bctx1.fillStyle = '#000';
+          bctx1.beginPath();
+          bctx1.arc(W / 2, H / 2, r - f, 0, Math.PI * 2);
+          bctx1.fill();
+        }
+        const g = bctx1.createRadialGradient(W / 2, H / 2, Math.max(0, r - f), W / 2, H / 2, r + f);
+        g.addColorStop(0, 'rgba(0,0,0,1)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        bctx1.fillStyle = g;
+        bctx1.beginPath();
+        bctx1.arc(W / 2, H / 2, r + f, 0, Math.PI * 2);
+        bctx1.fill();
+        bctx1.restore();
+        ctx.drawImage(buf1, 0, 0);
+      }
+      return;
+    }
+    if (effTr === 'spin') {
+      bctx1.clearRect(0, 0, W, H);
+      drawMedia(prev, prev.dur, {}, bctx1);
+      bctx2.clearRect(0, 0, W, H);
+      drawMedia(c, local, {}, bctx2);
+      ctx.save();
+      if (k < 0.5) {
+        const p1 = k * 2;
+        ctx.globalAlpha = 1 - p1;
+        ctx.translate(W / 2, H / 2);
+        ctx.rotate(-0.14 * p1);
+        ctx.scale(1 - 0.12 * p1, 1 - 0.12 * p1);
+        ctx.drawImage(buf1, -W / 2, -H / 2);
+      } else {
+        const p2 = (k - 0.5) * 2;
+        ctx.globalAlpha = p2;
+        ctx.translate(W / 2, H / 2);
+        ctx.rotate(0.14 * (1 - p2));
+        ctx.scale(0.88 + 0.12 * p2, 0.88 + 0.12 * p2);
+        ctx.drawImage(buf2, -W / 2, -H / 2);
+      }
+      ctx.restore();
+      return;
+    }
+    if (effTr === 'flip') {
+      bctx1.clearRect(0, 0, W, H);
+      drawMedia(prev, prev.dur, {}, bctx1);
+      bctx2.clearRect(0, 0, W, H);
+      drawMedia(c, local, {}, bctx2);
+      ctx.save();
+      if (k < 0.5) {
+        const p1 = k * 2;
+        const sx = Math.cos(p1 * (Math.PI / 2));
+        ctx.translate(W / 2, H / 2);
+        ctx.scale(Math.max(0.001, sx), 1);
+        ctx.drawImage(buf1, -W / 2, -H / 2);
+        ctx.fillStyle = 'rgba(0,0,0,' + (p1 * 0.45) + ')';
+        ctx.fillRect(-W / 2, -H / 2, W, H);
+      } else {
+        const p2 = (k - 0.5) * 2;
+        const sx = Math.sin(p2 * (Math.PI / 2));
+        ctx.translate(W / 2, H / 2);
+        ctx.scale(Math.max(0.001, sx), 1);
+        ctx.drawImage(buf2, -W / 2, -H / 2);
+        ctx.fillStyle = 'rgba(0,0,0,' + ((1 - p2) * 0.45) + ')';
+        ctx.fillRect(-W / 2, -H / 2, W, H);
+      }
+      ctx.restore();
+      return;
+    }
+    if (effTr === 'flash') {
+      if (k < 0.5) drawMedia(prev, prev.dur, {}, ctx);
+      else drawMedia(c, local, {}, ctx);
+      const flashA = Math.sin(k * Math.PI);
+      ctx.save();
+      ctx.fillStyle = 'rgba(255,255,255,' + (flashA * 0.95) + ')';
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+      return;
+    }
+    if (effTr === 'blur') {
+      const hasFilter = typeof ctx.filter === 'string';
+      if (hasFilter) {
+        const blurPx = Math.sin(k * Math.PI) * 26;
+        ctx.save();
+        ctx.filter = 'blur(' + blurPx.toFixed(1) + 'px)';
+        if (k < 0.5) {
+          drawMedia(prev, prev.dur, {}, ctx);
+        } else {
+          drawMedia(c, local, {}, ctx);
+        }
+        ctx.restore();
+      } else {
+        if (k < 0.5) {
+          const s = 1 - 0.22 * (k * 2);
+          drawMedia(prev, prev.dur, { zoom: s, alpha: 1 - k }, ctx);
+        } else {
+          const s = 0.78 + 0.22 * ((k - 0.5) * 2);
+          drawMedia(c, local, { zoom: s, alpha: k }, ctx);
+        }
+      }
+      return;
+    }
+    if (effTr === 'glitch') {
+      bctx1.clearRect(0, 0, W, H);
+      drawMedia(prev, prev.dur, {}, bctx1);
+      bctx2.clearRect(0, 0, W, H);
+      drawMedia(c, local, {}, bctx2);
+
+      ctx.drawImage(buf1, 0, 0);
+      ctx.save();
+      ctx.globalAlpha = k;
+      ctx.drawImage(buf2, 0, 0);
+      ctx.restore();
+
+      const intensity = Math.sin(k * Math.PI);
+      if (intensity > 0.05) {
+        const shiftX = Math.round(intensity * 16 * Math.sin(k * 24));
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        ctx.globalAlpha = intensity * 0.7;
+        bctx1.save();
+        bctx1.globalCompositeOperation = 'source-in';
+        bctx1.fillStyle = '#ff1144';
+        bctx1.fillRect(0, 0, W, H);
+        bctx1.restore();
+        ctx.drawImage(buf1, shiftX, 0);
+
+        bctx2.save();
+        bctx2.globalCompositeOperation = 'source-in';
+        bctx2.fillStyle = '#00f0ff';
+        bctx2.fillRect(0, 0, W, H);
+        bctx2.restore();
+        ctx.drawImage(buf2, -shiftX, 0);
+        ctx.restore();
+
+        const numSlices = 5;
+        for (let s = 0; s < numSlices; s++) {
+          const sy = ((s * 0.23 + k * 1.7) % 1) * (H - 50);
+          const sh = 10 + (s % 3) * 14;
+          const sliceDx = Math.sin(k * 35 + s * 13) * 22 * intensity;
+          ctx.drawImage(cv, 0, sy, W, sh, sliceDx, sy, W, sh);
+        }
+      }
+      return;
+    }
+    if (effTr === 'mosaic') {
+      drawMedia(prev, prev.dur, {}, ctx);
+      bctx2.clearRect(0, 0, W, H);
+      drawMedia(c, local, {}, bctx2);
+
+      const cols = 20;
+      const rows = Math.round(cols * (H / W));
+      const bw = W / cols;
+      const bh = H / rows;
+
+      for (let r = 0; r < rows; r++) {
+        for (let cl = 0; cl < cols; cl++) {
+          const seed = Math.abs(Math.sin((r * 41 + cl * 89 + (r ^ cl) * 13) * 12.9898) * 1000) % 1;
+          if (k >= seed) {
+            const cellAlpha = Math.min(1, (k - seed) / 0.15 + 0.1);
+            ctx.save();
+            ctx.globalAlpha = cellAlpha;
+            const sx = cl * bw, sy = r * bh;
+            ctx.drawImage(buf2, sx, sy, bw + 0.5, bh + 0.5, sx, sy, bw + 0.5, bh + 0.5);
+            ctx.restore();
+          }
+        }
+      }
+      return;
+    }
+
+    // Default fallback
+    drawMedia(prev, prev.dur, {}, ctx);
+    drawMedia(c, local, { alpha: k }, ctx);
+  }
+
+  /* ---------- Xem thử hiệu ứng chuyển cảnh trên 2 ảnh mẫu ---------- */
+  let previewTrRaf = 0;
+  let isPreviewingTr = false;
+  const samplePrevClip1 = newClip({ type: 'image', name: 'Mẫu 1', el: makeSample(0), dur: 4, fx: 'none' });
+  const samplePrevClip2 = newClip({ type: 'image', name: 'Mẫu 2', el: makeSample(1), dur: 4, fx: 'none' });
+
+  function stopTransitionPreview() {
+    if (isPreviewingTr) {
+      cancelAnimationFrame(previewTrRaf);
+      isPreviewingTr = false;
+      draw();
+    }
+  }
+
+  function previewTransition(trName: string, trDur: number) {
+    if (S.playing) pause();
+    if (isPreviewingTr) cancelAnimationFrame(previewTrRaf);
+    isPreviewingTr = true;
+    const dur = clamp(trDur || 0.6, 0.1, 3);
+    const holdPre = 0.35, holdPost = 0.55;
+    const totalDur = holdPre + dur + holdPost;
+    const startT = performance.now();
+    const effTrLabel = TR[trName] || trName;
+
+    const frame = () => {
+      if (!isPreviewingTr) return;
+      const elapsed = (performance.now() - startT) / 1000;
+      const W = cv.width, H = cv.height;
+
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, W, H);
+
+      if (elapsed < holdPre) {
+        drawMedia(samplePrevClip1, 1.0, {}, ctx);
+      } else if (elapsed < holdPre + dur) {
+        const local = elapsed - holdPre;
+        renderTransition(trName, samplePrevClip1, samplePrevClip2, local, dur, 1);
+      } else if (elapsed < totalDur) {
+        drawMedia(samplePrevClip2, 1.0, {}, ctx);
+      } else {
+        isPreviewingTr = false;
+        draw();
+        return;
+      }
+
+      // Huy hiệu thông báo hiệu ứng đang xem thử
+      ctx.save();
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.strokeStyle = '#ffd23f';
+      ctx.lineWidth = 1.5;
+      ctx.font = '600 ' + Math.max(13, Math.round(W * 0.034)) + 'px "Be Vietnam Pro", sans-serif';
+      const text = '▶ Xem thử: ' + effTrLabel + ' (' + dur.toFixed(1) + 's)';
+      const tw = ctx.measureText(text).width;
+      const bw = tw + 28, bh = Math.max(26, Math.round(W * 0.065));
+      const bx = (W - bw) / 2, by = Math.round(H * 0.06);
+      if ((ctx as any).roundRect) (ctx as any).roundRect(bx, by, bw, bh, 6);
+      else ctx.rect(bx, by, bw, bh);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#ffd23f';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, W / 2, by + bh / 2);
+      ctx.restore();
+
+      previewTrRaf = requestAnimationFrame(frame);
+    };
+
+    previewTrRaf = requestAnimationFrame(frame);
+  }
+
   function renderFrame(t: number) {
+    if (isPreviewingTr) return;
     const W = cv.width, H = cv.height;
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, W, H);
@@ -478,12 +952,11 @@ export function initStudio() {
     if (L) {
       const c = S.clips[L.i], prev = S.clips[L.i - 1];
       const trd = prev ? Math.min(c.trDur, prev.dur, c.dur) : 0;
-      if (prev && c.tr !== 'none' && L.local < trd) {
-        const k = ease(L.local / trd);
-        if (c.tr === 'fade') { drawMedia(prev, prev.dur, {}); drawMedia(c, L.local, { alpha: k }); }
-        else if (c.tr === 'slide') { drawMedia(prev, prev.dur, { dx: -W * k }); drawMedia(c, L.local, { dx: W * (1 - k) }); }
-        else { drawMedia(prev, prev.dur, {}); drawMedia(c, L.local, { alpha: k, zoom: 1.35 - 0.35 * k }); }
-      } else drawMedia(c, L.local, {});
+      if (prev && c.tr !== 'none' && L.local < trd && trd > 0) {
+        renderTransition(c.tr, prev, c, L.local, trd, L.i);
+      } else {
+        drawMedia(c, L.local, {}, ctx);
+      }
     } else {
       ctx.fillStyle = '#9fb3b8';
       ctx.font = '500 ' + Math.round(W * 0.045) + 'px "Be Vietnam Pro",sans-serif';
@@ -638,11 +1111,6 @@ export function initStudio() {
     const th = drawText(textToDraw, animYc, fs, prog, a, { color: cur.color, hi: cur.hi });
     if (animScale !== 1 || animDx !== 0) {
       ctx.restore();
-    }
-
-    if (st.next && nxt && nxt.text && nxt.t - t < 7) {
-      const f2 = fs * 0.62;
-      drawText(nxt.text, yc + th / 2 + f2 * 1.1, f2, null, 0.78 * a, { color: nxt.color, hi: nxt.hi });
     }
   }
   function drawTitle(t: number) {
@@ -920,9 +1388,13 @@ export function initStudio() {
     ctx.restore();
   }
 
-  /* ---------- lyric ---------- */
+  /* ---------- LYRIC: BỘ 3 BƯỚC (NHẬP LỜI - CĂN GIỜ - CHỈNH SỬA) ---------- */
   const TAGRE = /^\s*\[(\d+):(\d{1,2}(?:[.,]\d+)?)\](?:<(\d+):(\d{1,2}(?:[.,]\d+)?)>)?/;
   const STYLE_RE = /\s*\{(?:c=([^}\s]+))?(?:\s*h=([^}\s]+))?(?:\s*s=([\d.]+))?\}\s*$/;
+
+  let currentLyrStep: 1 | 2 | 3 = 1;
+  let tapIndex = 0;
+  let lastActiveCardId: number | null = null;
 
   function parseLyr(txt: string): LyricItem[] {
     const out: LyricItem[] = [];
@@ -969,6 +1441,40 @@ export function initStudio() {
     return out;
   }
 
+  function parseSrt(txt: string): LyricItem[] {
+    const blocks = txt.split(/\r?\n\r?\n/);
+    const out: LyricItem[] = [];
+    const srtTimeRegex = /(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})/;
+
+    for (const block of blocks) {
+      const lines = block.trim().split(/\r?\n/);
+      if (lines.length < 2) continue;
+      let timeLineIdx = -1;
+      for (let i = 0; i < lines.length; i++) {
+        if (srtTimeRegex.test(lines[i])) {
+          timeLineIdx = i;
+          break;
+        }
+      }
+      if (timeLineIdx === -1) continue;
+      const m = srtTimeRegex.exec(lines[timeLineIdx])!;
+      const startT = +m[1] * 3600 + +m[2] * 60 + +m[3] + (+m[4] / 1000);
+      const endT = +m[5] * 3600 + +m[6] * 60 + +m[7] + (+m[8] / 1000);
+      const textLines = lines.slice(timeLineIdx + 1).map(l => l.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
+      const text = textLines.join(' ');
+      if (text) {
+        out.push({
+          id: ++lyrUid,
+          t: parseFloat(startT.toFixed(2)),
+          endT: parseFloat(endT.toFixed(2)),
+          text
+        });
+      }
+    }
+    out.sort((a, b) => a.t - b.t);
+    return out;
+  }
+
   function formatLrcFromLyr(items: LyricItem[]): string {
     return items.map(item => {
       let line = '[' + fmt(item.t) + ']';
@@ -987,73 +1493,132 @@ export function initStudio() {
     }).join('\n');
   }
 
+  function rawLyricLines(): string[] {
+    return S.lyr.map(l => l.text);
+  }
+
   /* History undo/redo */
-  interface LyricHistoryState {
-    lyr: LyricItem[];
+  interface TimelineHistoryState {
+    clips: Clip[];
+    audioBlocks: AudioBlock[];
+    selAudioId: number | null;
+    sel: number | null;
     selLyrId: number | null;
+    lyr: LyricItem[];
     lrcText: string;
+    fadeIn: number;
+    fadeOut: number;
   }
-  const lyrUndoStack: LyricHistoryState[] = [];
-  const lyrRedoStack: LyricHistoryState[] = [];
+  const tlUndoStack: TimelineHistoryState[] = [];
+  const tlRedoStack: TimelineHistoryState[] = [];
 
-  function pushLyricHistory() {
-    const state: LyricHistoryState = {
-      lyr: S.lyr.map(item => ({ ...item })),
-      selLyrId: S.selLyrId,
-      lrcText: ($('#lyr') as HTMLTextAreaElement)?.value || ''
-    };
-    lyrUndoStack.push(state);
-    if (lyrUndoStack.length > 60) lyrUndoStack.shift();
-    lyrRedoStack.length = 0;
+  function updateUndoRedoUI() {
+    const btnUndo = $('#btnTlUndo') as HTMLButtonElement | null;
+    const btnRedo = $('#btnTlRedo') as HTMLButtonElement | null;
+    if (btnUndo) btnUndo.disabled = tlUndoStack.length === 0;
+    if (btnRedo) btnRedo.disabled = tlRedoStack.length === 0;
   }
 
-  function undoLyric() {
-    if (!lyrUndoStack.length) return toast('Không còn thao tác để hoàn tác.');
-    const current: LyricHistoryState = {
-      lyr: S.lyr.map(item => ({ ...item })),
+  function pushTimelineHistory() {
+    const state: TimelineHistoryState = {
+      clips: S.clips.map(c => ({ ...c })),
+      audioBlocks: S.audioBlocks.map(b => ({ ...b })),
+      selAudioId: S.selAudioId,
+      sel: S.sel,
       selLyrId: S.selLyrId,
-      lrcText: ($('#lyr') as HTMLTextAreaElement)?.value || ''
+      lyr: S.lyr.map(item => ({ ...item })),
+      lrcText: formatLrcFromLyr(S.lyr),
+      fadeIn: A.fadeIn,
+      fadeOut: A.fadeOut
     };
-    lyrRedoStack.push(current);
-    const prev = lyrUndoStack.pop()!;
-    S.lyr = prev.lyr.map(item => ({ ...item }));
+    tlUndoStack.push(state);
+    if (tlUndoStack.length > 50) tlUndoStack.shift();
+    tlRedoStack.length = 0;
+    updateUndoRedoUI();
+  }
+
+  function undoTimeline() {
+    if (!tlUndoStack.length) return toast('Không còn thao tác để hoàn tác.');
+    const current: TimelineHistoryState = {
+      clips: S.clips.map(c => ({ ...c })),
+      audioBlocks: S.audioBlocks.map(b => ({ ...b })),
+      selAudioId: S.selAudioId,
+      sel: S.sel,
+      selLyrId: S.selLyrId,
+      lyr: S.lyr.map(item => ({ ...item })),
+      lrcText: formatLrcFromLyr(S.lyr),
+      fadeIn: A.fadeIn,
+      fadeOut: A.fadeOut
+    };
+    tlRedoStack.push(current);
+    const prev = tlUndoStack.pop()!;
+    S.clips = prev.clips.map(c => ({ ...c }));
+    S.audioBlocks = prev.audioBlocks.map(b => ({ ...b }));
+    S.selAudioId = prev.selAudioId;
+    S.sel = prev.sel;
     S.selLyrId = prev.selLyrId;
+    S.lyr = prev.lyr.map(item => ({ ...item }));
+    A.fadeIn = prev.fadeIn;
+    A.fadeOut = prev.fadeOut;
     if ($('#lyr')) ($('#lyr') as HTMLTextAreaElement).value = prev.lrcText;
-    renderTimeline();
-    renderLyricWaveform();
-    updateLyricEditorUI();
+    const tlFadeIn = $('#tlFadeIn') as HTMLSelectElement | null;
+    if (tlFadeIn) tlFadeIn.value = String(A.fadeIn);
+    const tlFadeOut = $('#tlFadeOut') as HTMLSelectElement | null;
+    if (tlFadeOut) tlFadeOut.value = String(A.fadeOut);
+    autoFitImagesToMusic();
+    refreshAll();
+    renderLyricUI();
     updateInspector();
-    draw();
+    updateUndoRedoUI();
     toast('Đã hoàn tác (Ctrl+Z)');
   }
 
-  function redoLyric() {
-    if (!lyrRedoStack.length) return toast('Không có thao tác để làm lại.');
-    const current: LyricHistoryState = {
-      lyr: S.lyr.map(item => ({ ...item })),
+  function redoTimeline() {
+    if (!tlRedoStack.length) return toast('Không có thao tác để làm lại.');
+    const current: TimelineHistoryState = {
+      clips: S.clips.map(c => ({ ...c })),
+      audioBlocks: S.audioBlocks.map(b => ({ ...b })),
+      selAudioId: S.selAudioId,
+      sel: S.sel,
       selLyrId: S.selLyrId,
-      lrcText: ($('#lyr') as HTMLTextAreaElement)?.value || ''
+      lyr: S.lyr.map(item => ({ ...item })),
+      lrcText: formatLrcFromLyr(S.lyr),
+      fadeIn: A.fadeIn,
+      fadeOut: A.fadeOut
     };
-    lyrUndoStack.push(current);
-    const next = lyrRedoStack.pop()!;
-    S.lyr = next.lyr.map(item => ({ ...item }));
+    tlUndoStack.push(current);
+    const next = tlRedoStack.pop()!;
+    S.clips = next.clips.map(c => ({ ...c }));
+    S.audioBlocks = next.audioBlocks.map(b => ({ ...b }));
+    S.selAudioId = next.selAudioId;
+    S.sel = next.sel;
     S.selLyrId = next.selLyrId;
+    S.lyr = next.lyr.map(item => ({ ...item }));
+    A.fadeIn = next.fadeIn;
+    A.fadeOut = next.fadeOut;
     if ($('#lyr')) ($('#lyr') as HTMLTextAreaElement).value = next.lrcText;
-    renderTimeline();
-    renderLyricWaveform();
-    updateLyricEditorUI();
+    const tlFadeIn = $('#tlFadeIn') as HTMLSelectElement | null;
+    if (tlFadeIn) tlFadeIn.value = String(A.fadeIn);
+    const tlFadeOut = $('#tlFadeOut') as HTMLSelectElement | null;
+    if (tlFadeOut) tlFadeOut.value = String(A.fadeOut);
+    autoFitImagesToMusic();
+    refreshAll();
+    renderLyricUI();
     updateInspector();
-    draw();
+    updateUndoRedoUI();
     toast('Đã làm lại (Ctrl+Y)');
   }
+
+  const pushLyricHistory = pushTimelineHistory;
+  const undoLyric = undoTimeline;
+  const redoLyric = redoTimeline;
 
   function syncLyrToEditor(pushHistory = true) {
     if (pushHistory) pushLyricHistory();
     const lrc = formatLrcFromLyr(S.lyr);
     const lyrEl = $('#lyr') as HTMLTextAreaElement | null;
     if (lyrEl) lyrEl.value = lrc;
-    renderLyricWaveform();
-    updateLyricEditorUI();
+    renderLyricUI();
     updateInspector();
     renderTimeline();
     draw();
@@ -1067,16 +1632,363 @@ export function initStudio() {
   function selectLyrBlock(id: number | null) {
     S.selLyrId = id;
     if (id != null) {
-      S.sel = null; // Unselect clip so clip inspector is replaced
-      const ly = S.lyr.find(l => l.id === id);
-      if (ly) {
-        const rows = getLyricRows();
-        const rIdx = rows.findIndex(r => r.time != null && Math.abs(r.time - ly.t) < 0.05);
-        if (rIdx >= 0) lyrSelIdx = rIdx;
+      S.sel = null; // Bỏ chọn clip để bảng thuộc tính hiện câu lyric
+      document.querySelectorAll('.lyr-card.selected').forEach(c => c.classList.remove('selected'));
+      const cardEl = document.getElementById('card-lyr-' + id);
+      if (cardEl) {
+        cardEl.classList.add('selected');
+        cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
     }
     renderTimeline();
     updateInspector();
+  }
+
+  /* Bước 1: Tạo danh sách câu từ ô nhập thô với bảo lưu giờ */
+  function createSentenceListFromRaw() {
+    const rawEl = $('#lyrRawInput') as HTMLTextAreaElement | null;
+    const rawVal = rawEl ? rawEl.value : '';
+    const lines = rawVal.split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l.length > 0 && !/^\[[A-Za-z#]+:.*\]$/.test(l));
+
+    if (!lines.length) {
+      return toast('Vui lòng nhập ít nhất một câu lời bài hát.');
+    }
+
+    pushLyricHistory();
+    const oldLyr = S.lyr || [];
+    const newLyr: LyricItem[] = [];
+
+    lines.forEach((line, i) => {
+      const m = TAGRE.exec(line);
+      let t = 0;
+      let endT = 0;
+      let cleanText = line;
+      if (m) {
+        t = +m[1] * 60 + parseFloat(m[2].replace(',', '.'));
+        endT = (m[3] && m[4]) ? (+m[3] * 60 + parseFloat(m[4].replace(',', '.'))) : (t + 3.5);
+        cleanText = line.slice(m[0].length).trim();
+      } else {
+        // So khớp với vị trí dòng trước đó: nếu câu cũ đã có giờ thì GIỮ NGUYÊN GIỜ!
+        const existing = oldLyr[i];
+        if (existing && existing.t != null && existing.t >= 0) {
+          t = existing.t;
+          endT = existing.endT || (existing.t + 3.5);
+        } else {
+          t = i === 0 ? 0 : 0;
+          endT = i === 0 ? 3.5 : 0;
+        }
+      }
+
+      newLyr.push({
+        id: oldLyr[i]?.id || ++lyrUid,
+        t,
+        endT,
+        text: cleanText
+      });
+    });
+
+    const hasAnyTime = newLyr.some(l => l.t > 0);
+    if (hasAnyTime) {
+      newLyr.sort((a, b) => a.t - b.t);
+    }
+
+    S.lyr = newLyr;
+    syncLyrToEditor(false);
+    toast(`Đã tạo danh sách ${newLyr.length} câu. Chuyển sang Bước 2 để căn giờ!`);
+    switchLyricStep(2);
+  }
+
+  /* Bước 2: Bắt nhịp / Căn giờ (Tap-to-sync) */
+  function updateTapStageUI() {
+    const counterEl = $('#lyrTapCounter');
+    const prevEl = $('#lyrTapPrev');
+    const curEl = $('#lyrTapCurrent');
+    const nextEl = $('#lyrTapNext');
+
+    if (!S.lyr.length) {
+      if (counterEl) counterEl.textContent = 'Câu 0 / 0';
+      if (prevEl) prevEl.textContent = '';
+      if (curEl) curEl.textContent = '(Chưa có lời bài hát. Hãy nhập lời ở Bước 1)';
+      if (nextEl) nextEl.textContent = '';
+      return;
+    }
+
+    tapIndex = clamp(tapIndex, 0, S.lyr.length);
+
+    if (counterEl) {
+      counterEl.textContent = `Câu ${Math.min(tapIndex + 1, S.lyr.length)} / ${S.lyr.length}`;
+    }
+
+    const prevItem = tapIndex > 0 ? S.lyr[tapIndex - 1] : null;
+    if (prevEl) {
+      prevEl.textContent = prevItem ? `✓ #${tapIndex}: ${prevItem.text} [${fmt(prevItem.t)}]` : '(Bắt đầu từ câu đầu tiên)';
+    }
+
+    if (tapIndex < S.lyr.length) {
+      const curItem = S.lyr[tapIndex];
+      if (curEl) curEl.textContent = `#${tapIndex + 1}: ${curItem.text}`;
+      const nextItem = S.lyr[tapIndex + 1];
+      if (nextEl) nextEl.textContent = nextItem ? `Câu sau: ${nextItem.text}` : '(Đây là câu cuối cùng)';
+    } else {
+      if (curEl) curEl.textContent = '🎉 Đã căn xong toàn bộ bài hát!';
+      if (nextEl) nextEl.textContent = 'Bấm "Chuyển sang Bước 3" để rà soát chi tiết.';
+    }
+  }
+
+  async function tapMarkNow() {
+    if (!S.lyr.length) return toast('Hãy nhập lời ở Bước 1 trước.');
+
+    if (!S.playing) {
+      await resumeAudioContext('Căn giờ');
+      play();
+    }
+
+    if (tapIndex >= S.lyr.length) {
+      toast('Đã căn xong toàn bộ câu hát! Chuyển sang Bước 3.');
+      switchLyricStep(3);
+      return;
+    }
+
+    pushLyricHistory();
+    const curTime = Math.max(0, parseFloat((S.t).toFixed(2)));
+    const curItem = S.lyr[tapIndex];
+    curItem.t = curTime;
+
+    // Giờ kết thúc của câu trước = giờ bắt đầu của câu này (trừ 0.05s)
+    if (tapIndex > 0) {
+      const prev = S.lyr[tapIndex - 1];
+      prev.endT = Math.max(prev.t + 0.3, parseFloat((curTime - 0.05).toFixed(2)));
+    }
+
+    tapIndex++;
+
+    if (tapIndex >= S.lyr.length) {
+      curItem.endT = parseFloat((curTime + 3.5).toFixed(2));
+      toast('🎉 Đã căn xong toàn bộ bài hát! Tự động chuyển sang Bước 3.');
+      syncLyrToEditor(false);
+      switchLyricStep(3);
+      return;
+    }
+
+    updateTapStageUI();
+    syncLyrToEditor(false);
+  }
+
+  function tapUndoLine() {
+    if (tapIndex <= 0) return toast('Đang ở câu đầu tiên.');
+    pushLyricHistory();
+    tapIndex--;
+    const newT = Math.max(0, S.t - 3);
+    seek(newT);
+    updateTapStageUI();
+    toast(`Đã quay lại câu ${tapIndex + 1} và lùi nhạc 3 giây.`);
+  }
+
+  function tapSkipLine() {
+    if (tapIndex >= S.lyr.length) return;
+    tapIndex++;
+    updateTapStageUI();
+    toast('Đã bỏ qua câu');
+  }
+
+  /* Bước 3: Render danh sách thẻ cuộn chỉnh sửa từng câu */
+  function renderLyricCards() {
+    const listEl = $('#lyrCardsList');
+    const badgeEl = $('#lyrCardsTotalBadge');
+    if (badgeEl) badgeEl.textContent = `${S.lyr.length} câu`;
+    if (!listEl) return;
+
+    if (!S.lyr.length) {
+      listEl.innerHTML = '<div style="padding: 24px; text-align: center; color: var(--muted); font-size: 12.5px;">Chưa có danh sách câu. Hãy nhập lời ở <strong>Bước 1</strong>.</div>';
+      return;
+    }
+
+    let html = '';
+    S.lyr.forEach((ly, i) => {
+      const isSel = ly.id === S.selLyrId;
+      const dur = Math.max(0, (ly.endT || ly.t + 3) - ly.t);
+      html += `
+        <div class="lyr-card ${isSel ? 'selected' : ''}" id="card-lyr-${ly.id}" data-id="${ly.id}" data-idx="${i}">
+          <div class="lyr-card-header">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="badge ${isSel ? 'warn' : 'neutral'}" style="font-size:10.5px;padding:1px 6px;">#${i + 1}</span>
+              <button class="btn sm" data-action="play" data-idx="${i}" type="button" title="Nghe thử câu này từ ${fmt(ly.t)}" style="padding:2px 7px;font-size:11px;">▶</button>
+            </div>
+            <div class="lyr-card-time-group">
+              <span style="color:var(--muted);font-size:10.5px;">Từ:</span>
+              <button class="btn-nudge" data-action="nudge-minus" data-idx="${i}" type="button" title="Dời sớm 0.1s">-0.1s</button>
+              <input class="lyr-card-time-input" data-action="start" data-idx="${i}" type="text" value="${fmt(ly.t)}" title="Giờ bắt đầu câu" />
+              <button class="btn-nudge" data-action="nudge-plus" data-idx="${i}" type="button" title="Dời trễ 0.1s">+0.1s</button>
+              <span style="color:var(--muted);font-size:10.5px;margin-left:4px;">Đến:</span>
+              <input class="lyr-card-time-input" data-action="end" data-idx="${i}" type="text" value="${fmt(ly.endT || ly.t + 3)}" title="Giờ kết thúc câu" />
+              <span style="color:var(--muted);font-size:10px;font-family:var(--font-mono);">(${dur.toFixed(1)}s)</span>
+            </div>
+            <div style="display:flex;gap:4px;margin-left:auto;">
+              <button class="btn sm" data-action="split" data-idx="${i}" type="button" title="Tách câu này thành hai" style="padding:2px 6px;font-size:11px;">✂️</button>
+              <button class="btn sm" data-action="merge" data-idx="${i}" type="button" title="Gộp câu này với câu kế tiếp" style="padding:2px 6px;font-size:11px;">🔗</button>
+              <button class="btn sm danger" data-action="delete" data-idx="${i}" type="button" title="Xóa câu này" style="padding:2px 6px;font-size:11px;">🗑️</button>
+            </div>
+          </div>
+          <div>
+            <input class="lyr-card-text-input" data-action="text" data-idx="${i}" type="text" value="${esc(ly.text)}" placeholder="Nội dung câu hát..." />
+          </div>
+        </div>
+      `;
+    });
+
+    listEl.innerHTML = html;
+  }
+
+  function parseTimeStr(str: string): number | null {
+    str = str.trim();
+    if (!str) return null;
+    const parts = str.split(':');
+    if (parts.length === 2) {
+      const min = parseFloat(parts[0]);
+      const sec = parseFloat(parts[1].replace(',', '.'));
+      if (!isNaN(min) && !isNaN(sec)) return min * 60 + sec;
+    }
+    const num = parseFloat(str.replace(',', '.'));
+    return !isNaN(num) ? num : null;
+  }
+
+  function handleCardAction(e: Event) {
+    const target = e.target as HTMLElement;
+    const actionEl = target.closest('[data-action]') as HTMLElement | null;
+    const cardEl = target.closest('.lyr-card') as HTMLElement | null;
+    if (!cardEl) return;
+    const idx = +(cardEl.dataset.idx || 0);
+    const item = S.lyr[idx];
+    if (!item) return;
+
+    if (!actionEl) {
+      selectLyrBlock(item.id);
+      seek(item.t);
+      return;
+    }
+
+    const action = actionEl.dataset.action;
+
+    if (action === 'play') {
+      e.stopPropagation();
+      seek(item.t);
+      selectLyrBlock(item.id);
+      if (!S.playing) {
+        resumeAudioContext('Nghe thử câu').then(() => { play(); });
+      }
+    } else if (action === 'nudge-minus') {
+      e.stopPropagation();
+      pushLyricHistory();
+      item.t = Math.max(0, parseFloat((item.t - 0.1).toFixed(2)));
+      syncLyrToEditor(false);
+      toast(`Câu #${idx + 1}: ${fmt(item.t)} (-0.1s)`);
+    } else if (action === 'nudge-plus') {
+      e.stopPropagation();
+      pushLyricHistory();
+      item.t = parseFloat((item.t + 0.1).toFixed(2));
+      syncLyrToEditor(false);
+      toast(`Câu #${idx + 1}: ${fmt(item.t)} (+0.1s)`);
+    } else if (action === 'split') {
+      e.stopPropagation();
+      splitLyricAtHeadOrMid(idx);
+    } else if (action === 'merge') {
+      e.stopPropagation();
+      mergeLyricRow(idx);
+    } else if (action === 'delete') {
+      e.stopPropagation();
+      deleteLyricRow(idx);
+    }
+  }
+
+  function handleCardChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    const action = target.dataset.action;
+    const cardEl = target.closest('.lyr-card') as HTMLElement | null;
+    if (!cardEl) return;
+    const idx = +(cardEl.dataset.idx || 0);
+    const item = S.lyr[idx];
+    if (!item) return;
+
+    if (action === 'text') {
+      const val = target.value.trim();
+      if (val !== item.text) {
+        pushLyricHistory();
+        item.text = val;
+        syncLyrToEditor(false);
+      }
+    } else if (action === 'start') {
+      const t = parseTimeStr(target.value);
+      if (t != null && t >= 0) {
+        pushLyricHistory();
+        item.t = parseFloat(t.toFixed(2));
+        S.lyr.sort((a, b) => a.t - b.t);
+        syncLyrToEditor(false);
+      } else {
+        target.value = fmt(item.t);
+      }
+    } else if (action === 'end') {
+      const endT = parseTimeStr(target.value);
+      if (endT != null && endT > item.t) {
+        pushLyricHistory();
+        item.endT = parseFloat(endT.toFixed(2));
+        syncLyrToEditor(false);
+      } else {
+        target.value = fmt(item.endT || item.t + 3);
+      }
+    }
+  }
+
+  function splitLyricAtHeadOrMid(idx: number) {
+    const cur = S.lyr[idx];
+    if (!cur) return;
+    pushLyricHistory();
+    const words = cur.text.split(' ');
+    const midWord = Math.max(1, Math.round(words.length / 2));
+    const txt1 = words.slice(0, midWord).join(' ') || cur.text;
+    const txt2 = words.slice(midWord).join(' ') || '...';
+
+    const curEnd = cur.endT || (cur.t + 3);
+    const splitT = parseFloat(((cur.t + curEnd) / 2).toFixed(2));
+    cur.endT = splitT;
+    cur.text = txt1;
+
+    const nextId = ++lyrUid;
+    S.lyr.splice(idx + 1, 0, {
+      id: nextId,
+      t: splitT,
+      endT: curEnd,
+      text: txt2,
+      color: cur.color,
+      hi: cur.hi,
+      size: cur.size
+    });
+
+    selectLyrBlock(nextId);
+    syncLyrToEditor(false);
+    toast(`Đã tách câu #${idx + 1} thành 2 câu.`);
+  }
+
+  function mergeLyricRow(idx: number) {
+    if (idx >= S.lyr.length - 1) return toast('Đây là câu cuối cùng, không có câu sau để gộp.');
+    pushLyricHistory();
+    const cur = S.lyr[idx];
+    const nxt = S.lyr[idx + 1];
+    cur.text = (cur.text + ' ' + nxt.text).trim();
+    cur.endT = Math.max(cur.endT || 0, nxt.endT || 0);
+    S.lyr.splice(idx + 1, 1);
+    selectLyrBlock(cur.id);
+    syncLyrToEditor(false);
+    toast(`Đã gộp với câu kế tiếp.`);
+  }
+
+  function deleteLyricRow(idx: number) {
+    pushLyricHistory();
+    S.lyr.splice(idx, 1);
+    S.selLyrId = S.lyr[Math.min(idx, S.lyr.length - 1)]?.id || null;
+    syncLyrToEditor(false);
+    toast('Đã xóa câu.');
   }
 
   function addLyricAtPlayhead() {
@@ -1126,25 +2038,106 @@ export function initStudio() {
     const cur = selLyr();
     if (!cur) return toast('Hãy chọn một câu trên timeline để gộp.');
     const idx = S.lyr.findIndex(l => l.id === cur.id);
-    const next = S.lyr[idx + 1];
-    if (!next) return toast('Đây là câu cuối cùng, không có câu sau để gộp.');
-    pushLyricHistory();
-    cur.text = (cur.text + ' ' + next.text).trim();
-    cur.endT = Math.max(cur.endT, next.endT);
-    S.lyr.splice(idx + 1, 1);
-    syncLyrToEditor(false);
-    toast('Đã gộp với câu sau');
+    mergeLyricRow(idx);
   }
 
   function deleteLyricLine() {
     const cur = selLyr();
     if (!cur) return toast('Hãy chọn một câu trên timeline để xóa.');
-    pushLyricHistory();
     const idx = S.lyr.findIndex(l => l.id === cur.id);
-    S.lyr.splice(idx, 1);
-    S.selLyrId = S.lyr[Math.min(idx, S.lyr.length - 1)]?.id || null;
+    deleteLyricRow(idx);
+  }
+
+  function shiftLyr(d: number) {
+    if (!S.lyr.length) return toast('Chưa có danh sách câu để dịch.');
+    pushLyricHistory();
+    S.lyr.forEach(l => {
+      l.t = Math.max(0, parseFloat((l.t + d).toFixed(2)));
+      if (l.endT) l.endT = Math.max(l.t + 0.3, parseFloat((l.endT + d).toFixed(2)));
+    });
     syncLyrToEditor(false);
-    toast('Đã xóa câu');
+    toast(`Đã dịch tất cả các câu ${d > 0 ? '+' : ''}${d.toFixed(2)}s.`);
+  }
+
+  function clearAllTimes() {
+    if (!S.lyr.length) return toast('Chưa có câu nào.');
+    pushLyricHistory();
+    S.lyr.forEach((l) => {
+      l.t = 0;
+      l.endT = 0;
+    });
+    tapIndex = 0;
+    syncLyrToEditor(false);
+    toast('Đã xóa toàn bộ mốc giờ. Giữ nguyên toàn bộ câu chữ.');
+  }
+
+  function setSpeed(rate: number) {
+    S.speed = rate;
+    A.el.preservesPitch = true;
+    (A.el as any).webkitPreservesPitch = true;
+    (A.el as any).mozPreservesPitch = true;
+    A.el.playbackRate = rate;
+    if (S.playing) {
+      tbase = S.t;
+      t0 = performance.now();
+    }
+    ['0.5', '0.75', '1.0'].forEach(s => {
+      const btn = document.querySelector('[data-speed="' + s + '"]');
+      if (btn) {
+        const isCur = Math.abs(parseFloat(s) - rate) < 0.01;
+        btn.setAttribute('aria-pressed', String(isCur));
+      }
+    });
+    toast('Tốc độ phát: ' + rate + 'x (giữ nguyên cao độ)');
+  }
+
+  function switchLyricStep(step: 1 | 2 | 3) {
+    currentLyrStep = step;
+    [1, 2, 3].forEach(s => {
+      const btn = document.getElementById('btnLyrStep' + s);
+      const pane = document.getElementById('lyrStep' + s + 'Pane');
+      if (btn) btn.classList.toggle('active', s === step);
+      if (pane) pane.style.display = s === step ? 'grid' : 'none';
+    });
+
+    if (step === 1) {
+      const rawEl = $('#lyrRawInput') as HTMLTextAreaElement | null;
+      if (rawEl && !rawEl.value.trim() && S.lyr.length) {
+        rawEl.value = rawLyricLines().join('\n');
+      }
+    } else if (step === 2) {
+      updateTapStageUI();
+    } else if (step === 3) {
+      renderLyricCards();
+    }
+  }
+
+  function renderLyricUI() {
+    if (currentLyrStep === 2) updateTapStageUI();
+    else if (currentLyrStep === 3) renderLyricCards();
+    const rawEl = $('#lyrRawInput') as HTMLTextAreaElement | null;
+    if (rawEl && !rawEl.matches(':focus')) {
+      rawEl.value = rawLyricLines().join('\n');
+    }
+    const lyrCardsTotal = $('#lyrCardsTotalBadge');
+    if (lyrCardsTotal) lyrCardsTotal.textContent = `${S.lyr.length} câu`;
+  }
+
+  function updateActiveLyricCard(t: number) {
+    if (currentLyrStep !== 3) return;
+    const activeItem = S.lyr.find(l => t >= l.t && t < (l.endT || l.t + 3));
+    const activeId = activeItem ? activeItem.id : null;
+    if (activeId === lastActiveCardId) return;
+    lastActiveCardId = activeId;
+
+    document.querySelectorAll('.lyr-card.active-playing').forEach(el => el.classList.remove('active-playing'));
+    if (activeId != null) {
+      const cardEl = document.getElementById('card-lyr-' + activeId);
+      if (cardEl) {
+        cardEl.classList.add('active-playing');
+        cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
   }
 
   function showLyrInlineEditor(ly: LyricItem, blockEl: HTMLElement) {
@@ -1201,306 +2194,6 @@ export function initStudio() {
     input.addEventListener('blur', () => {
       commit();
     });
-  }
-  function rawLines() {
-    return $('#lyr').value.split(/\r?\n/)
-      .map((l: string) => l.replace(/^\s*(\[\d+:\d{1,2}(?:[.,]\d+)?\]\s*)+/, '').trim())
-      .filter((l: string) => l && !/^\[[A-Za-z#]+:.*\]$/.test(l));
-  }
-  let lyrSelIdx = 0;
-
-  interface LyrRow {
-    lineIndex: number;
-    time: number | null;
-    text: string;
-  }
-
-  function getLyricRows(): LyrRow[] {
-    const el = $('#lyr') as HTMLTextAreaElement | null;
-    if (!el) return [];
-    const lines = el.value.split(/\r?\n/);
-    const rows: LyrRow[] = [];
-    lines.forEach((l, i) => {
-      const trimmed = l.trim();
-      if (!trimmed || /^\[[A-Za-z#]+:.*\]$/.test(trimmed)) return;
-      const m = TAGRE.exec(trimmed);
-      let time: number | null = null;
-      let text = trimmed;
-      if (m) {
-        time = +m[1] * 60 + parseFloat(m[2].replace(',', '.'));
-        text = trimmed.slice(m[0].length).trim();
-      }
-      rows.push({ lineIndex: i, time, text });
-    });
-    return rows;
-  }
-
-  function updateLyricEditorUI() {
-    const rows = getLyricRows();
-    if (!rows.length) {
-      const badge = $('#lyrSelBadge'); if (badge) badge.textContent = 'Câu 0/0';
-      const timeLbl = $('#lyrSelTime'); if (timeLbl) timeLbl.textContent = '--:--.--';
-      const textEl = $('#lyrSelText'); if (textEl) textEl.textContent = '(Chưa có lời bài hát. Hãy dán lời vào ô bên dưới)';
-      return;
-    }
-    lyrSelIdx = clamp(lyrSelIdx, 0, rows.length - 1);
-    const cur = rows[lyrSelIdx];
-    const badge = $('#lyrSelBadge');
-    if (badge) badge.textContent = 'Câu ' + (lyrSelIdx + 1) + '/' + rows.length;
-    const timeLbl = $('#lyrSelTime');
-    if (timeLbl) timeLbl.textContent = cur.time != null ? fmt(cur.time) : 'Chưa có mốc';
-    const textEl = $('#lyrSelText');
-    if (textEl) textEl.textContent = cur.text || '(Dòng trống)';
-  }
-
-  function selectLyricLine(idx: number) {
-    const rows = getLyricRows();
-    if (!rows.length) return;
-    lyrSelIdx = clamp(idx, 0, rows.length - 1);
-    updateLyricEditorUI();
-    renderLyricWaveform();
-  }
-
-  function renderLyricWaveform() {
-    const cvEl = $('#lyrWfCv') as HTMLCanvasElement | null;
-    const trackEl = $('#lyrWfTrack');
-    if (!cvEl || !trackEl) return;
-    const width = trackEl.clientWidth || 360;
-    const height = 80;
-    cvEl.width = width;
-    cvEl.height = height;
-    cvEl.style.width = width + 'px';
-
-    const ctxW = cvEl.getContext('2d')!;
-    ctxW.clearRect(0, 0, width, height);
-
-    const dur = Math.max(total(), A.dur || 1);
-
-    // Nền & Baseline
-    ctxW.fillStyle = '#151f22';
-    ctxW.fillRect(0, 0, width, height);
-    ctxW.fillStyle = 'rgba(255,255,255,0.08)';
-    ctxW.fillRect(0, 48, width, 1);
-
-    // Thước đo thời gian trên sóng lyric
-    const rulerEl = $('#lyrWfRuler');
-    if (rulerEl) {
-      let rHtml = '';
-      const step = dur > 180 ? 20 : dur > 90 ? 15 : dur > 40 ? 10 : 5;
-      for (let s = 0; s <= dur; s += step) {
-        const x = (s / dur) * width;
-        rHtml += '<span style="position:absolute;left:' + x + 'px;font-size:9px;font-family:var(--font-mono);color:var(--muted)">' + fmt(s) + '</span>';
-      }
-      rulerEl.innerHTML = rHtml;
-    }
-
-    // Sóng âm bài hát
-    const peaks = A.rawPeaks.length ? A.rawPeaks : A.peaks;
-    if (peaks.length) {
-      const pps = width / peaks.length;
-      ctxW.fillStyle = '#475569';
-      for (let i = 0; i < peaks.length; i++) {
-        const x = i * pps;
-        const pk = peaks[i];
-        const h = Math.max(2, pk * 55);
-        ctxW.fillRect(x, 48 - h / 2, Math.max(1, pps - 0.5), h);
-      }
-    }
-
-    // Các vạch mốc lời bài hát (Lyric Markers)
-    const rows = getLyricRows();
-    rows.forEach((r, idx) => {
-      if (r.time == null) return;
-      const x = (r.time / dur) * width;
-      const isSel = idx === lyrSelIdx;
-
-      ctxW.save();
-      if (isSel) {
-        // Vạch câu đang chọn nổi bật (vàng neon phát sáng)
-        ctxW.shadowColor = '#ffd23f';
-        ctxW.shadowBlur = 8;
-        ctxW.strokeStyle = '#ffd23f';
-        ctxW.lineWidth = 2.5;
-        ctxW.beginPath();
-        ctxW.moveTo(x, 16);
-        ctxW.lineTo(x, height);
-        ctxW.stroke();
-
-        // Cờ đánh dấu câu đang chọn ở trên đỉnh
-        ctxW.fillStyle = '#ffd23f';
-        ctxW.beginPath();
-        if ((ctxW as any).roundRect) {
-          (ctxW as any).roundRect(Math.max(2, x - 14), 1, 28, 14, 3);
-        } else {
-          ctxW.rect(Math.max(2, x - 14), 1, 28, 14);
-        }
-        ctxW.fill();
-
-        ctxW.fillStyle = '#0f1418';
-        ctxW.font = 'bold 9px var(--font-mono)';
-        ctxW.textAlign = 'center';
-        ctxW.textBaseline = 'middle';
-        ctxW.fillText('#' + (idx + 1), Math.max(2, x - 14) + 14, 8);
-      } else {
-        // Vạch các câu khác (cyan / teal dịu mắt)
-        ctxW.strokeStyle = 'rgba(45, 212, 191, 0.7)';
-        ctxW.lineWidth = 1.5;
-        ctxW.beginPath();
-        ctxW.moveTo(x, 18);
-        ctxW.lineTo(x, height);
-        ctxW.stroke();
-
-        // Chấm số thứ tự câu
-        ctxW.fillStyle = 'rgba(45, 212, 191, 0.85)';
-        ctxW.beginPath();
-        ctxW.arc(x, 14, 3, 0, Math.PI * 2);
-        ctxW.fill();
-      }
-      ctxW.restore();
-    });
-
-    // Cập nhật vị trí playhead
-    const lyrPlayhead = $('#lyrWfPlayhead');
-    if (lyrPlayhead) {
-      lyrPlayhead.style.left = clamp((S.t / dur) * 100, 0, 100) + '%';
-    }
-  }
-
-  function setLyrText(txt: string) {
-    $('#lyr').value = txt;
-    S.lyr = parseLyr(txt);
-    renderTimeline();
-    renderLyricWaveform();
-    updateLyricEditorUI();
-    draw();
-  }
-
-  function setLineTime(rowIdx: number, newTime: number | null) {
-    const el = $('#lyr') as HTMLTextAreaElement | null;
-    if (!el) return;
-    const lines = el.value.split(/\r?\n/);
-    let curRow = 0;
-    for (let i = 0; i < lines.length; i++) {
-      const trimmed = lines[i].trim();
-      if (!trimmed || /^\[[A-Za-z#]+:.*\]$/.test(trimmed)) continue;
-      if (curRow === rowIdx) {
-        const cleanText = trimmed.replace(/^\s*(\[\d+:\d{1,2}(?:[.,]\d+)?\]\s*)+/, '').trim();
-        if (newTime != null) {
-          lines[i] = '[' + fmt(Math.max(0, newTime)) + '] ' + cleanText;
-        } else {
-          lines[i] = cleanText;
-        }
-        break;
-      }
-      curRow++;
-    }
-    setLyrText(lines.join('\n'));
-    updateLyricEditorUI();
-    renderLyricWaveform();
-  }
-
-  function shiftLineTime(rowIdx: number, delta: number) {
-    const rows = getLyricRows();
-    if (!rows[rowIdx]) return;
-    const baseTime = rows[rowIdx].time != null ? rows[rowIdx].time! : S.t;
-    const target = Math.max(0, baseTime + delta);
-    setLineTime(rowIdx, target);
-    toast('Câu ' + (rowIdx + 1) + ': ' + fmt(target) + ' (' + (delta > 0 ? '+' : '') + delta.toFixed(2) + 's)');
-  }
-
-  function setSpeed(rate: number) {
-    S.speed = rate;
-    A.el.preservesPitch = true;
-    (A.el as any).webkitPreservesPitch = true;
-    (A.el as any).mozPreservesPitch = true;
-    A.el.playbackRate = rate;
-    if (S.playing) {
-      tbase = S.t;
-      t0 = performance.now();
-    }
-    ['0.5', '0.75', '1.0'].forEach(s => {
-      const btn = document.querySelector('[data-speed="' + s + '"]');
-      if (btn) {
-        const isCur = Math.abs(parseFloat(s) - rate) < 0.01;
-        btn.setAttribute('aria-pressed', String(isCur));
-      }
-    });
-    toast('Tốc độ phát: ' + rate + 'x (giữ nguyên cao độ)');
-  }
-
-  function jumpBack3s() {
-    const newT = Math.max(0, S.t - 3);
-    seek(newT);
-    if (tap.on) {
-      if (tap.i > 0) {
-        tap.i = Math.max(0, tap.i - 1);
-        tap.times[tap.i] = null;
-        updateTap();
-      }
-    } else {
-      const rows = getLyricRows();
-      for (let i = rows.length - 1; i >= 0; i--) {
-        if (rows[i].time != null && rows[i].time! <= newT + 0.3) {
-          lyrSelIdx = i;
-          break;
-        }
-      }
-      updateLyricEditorUI();
-      renderLyricWaveform();
-    }
-    toast('Đã lùi 3 giây');
-  }
-
-  function writeTimes(times: (number | null)[]) {
-    setLyrText(rawLines().map((l: string, i: number) => times[i] != null ? '[' + fmt(times[i]!) + '] ' + l : l).join('\n'));
-  }
-  function evenLyrics() {
-    const lines = rawLines();
-    if (!lines.length) return toast('Hãy dán lời bài hát trước.');
-    let T = total();
-    if (A.loaded) T = Math.max(T, A.dur - A.start);
-    if (T <= 0) return toast('Chưa có clip hoặc nhạc để chia theo thời lượng.');
-    const w = lines.map((l: string) => l.length + 8), sum = w.reduce((a: number, b: number) => a + b, 0);
-    let c = 0;
-    const times = w.map((x: number) => { const t = T * c / sum; c += x; return t; });
-    writeTimes(times);
-  }
-  function shiftLyr(d: number) {
-    const txt = $('#lyr').value.replace(/\[(\d+):(\d{1,2}(?:[.,]\d+)?)\]/g, (_m: string, a: string, b: string) =>
-      '[' + fmt(Math.max(0, +a * 60 + parseFloat(b.replace(',', '.')) + d)) + ']'
-    );
-    setLyrText(txt);
-  }
-  const tap = { on: false, i: 0, lines: [] as string[], times: [] as (number | null)[] };
-  function startTap() {
-    const lines = rawLines();
-    if (!lines.length) return toast('Hãy dán lời bài hát trước.');
-    if (!total()) return toast('Hãy thêm clip trước khi gõ nhịp.');
-    tap.on = true; tap.i = 0; tap.lines = lines; tap.times = [];
-    $('#tapbox').hidden = false;
-    updateTap();
-    seek(0);
-    resumeAudioContext('Gõ nhịp').then(() => {
-      play();
-    });
-  }
-  function updateTap() {
-    $('#tapNext').textContent = tap.i < tap.lines.length ? tap.lines[tap.i] : 'Hết lời';
-  }
-  function tapNext() {
-    if (!tap.on) return;
-    tap.times[tap.i] = Math.max(0, S.t - (+$('#tapLag').value || 0));
-    tap.i++;
-    if (tap.i >= tap.lines.length) endTap();
-    else updateTap();
-  }
-  function endTap() {
-    if (!tap.on) return;
-    tap.on = false;
-    $('#tapbox').hidden = true;
-    pause();
-    writeTimes(tap.times);
-    toast('Đã gán giờ cho ' + tap.times.filter(x => x != null).length + ' dòng.');
   }
 
   /* ---------- âm thanh ---------- */
@@ -1751,6 +2444,15 @@ export function initStudio() {
 
       A.loaded = true;
       A.loadState = 'Đã giải mã (' + buf.sampleRate + 'Hz, ' + (buf.numberOfChannels === 2 ? 'stereo' : 'mono') + ')';
+      S.audioBlocks = [{
+        id: ++audioUid,
+        start: 0,
+        srcIn: 0,
+        srcOut: A.dur,
+        dur: A.dur
+      }];
+      S.selAudioId = S.audioBlocks[0].id;
+      autoFitImagesToMusic();
     } catch (e: any) {
       console.warn('decodeAudioData failed:', e);
       A.loadState = 'decodeAudioData không được, đang đọc thẻ audio...';
@@ -1765,6 +2467,17 @@ export function initStudio() {
         A.loaded = A.dur > 0;
         A.loadState = 'Đã đọc metadata thẻ audio (không có sóng âm: ' + (e?.message || e) + ')';
         setAudioError('Lưu ý decodeAudioData: ' + (e?.message || e));
+        if (A.loaded) {
+          S.audioBlocks = [{
+            id: ++audioUid,
+            start: 0,
+            srcIn: 0,
+            srcOut: A.dur,
+            dur: A.dur
+          }];
+          S.selAudioId = S.audioBlocks[0].id;
+          autoFitImagesToMusic();
+        }
       } catch (err2: any) {
         A.loaded = false;
         A.loadState = 'Thất bại';
@@ -1772,10 +2485,9 @@ export function initStudio() {
       }
     }
 
-    $('#audioInfo').textContent = A.loaded ? (A.name + ' (' + fmt(A.dur) + ')') : 'Không đọc được file nhạc này.';
+    const aInfo = $('#audioInfo');
+    if (aInfo) aInfo.textContent = A.loaded ? (A.name + ' (' + fmt(A.dur) + ')') : 'Không đọc được file nhạc này.';
     renderWaveformEditor();
-    renderLyricWaveform();
-    if (S.syncWithMusic) applyMusicSync();
     applyVol();
     refreshAll();
     updateAudioStatus();
@@ -2012,16 +2724,19 @@ export function initStudio() {
     const statusEl = $('#exportAudioStatus');
     const prevStatus = statusEl ? statusEl.textContent : 'Đoạn chọn + Âm lượng + Fade';
 
-    const start = Math.max(0, A.start);
-    const end = (A.end > start && A.end <= (A.dur || 999999)) ? A.end : (A.dur || 1);
-    const dur = end - start;
-    if (dur <= 0.05) {
-      return toast('Đoạn nhạc chọn quá ngắn để xuất.');
-    }
+    const blocks = S.audioBlocks.length > 0 ? S.audioBlocks : [{
+      id: 1,
+      start: 0,
+      srcIn: 0,
+      srcOut: A.dur || 1,
+      dur: A.dur || 1
+    }];
+
+    const totalDur = Math.max(0.2, blocks.reduce((max, b) => Math.max(max, b.start + b.dur), 0));
 
     try {
       if (statusEl) statusEl.textContent = 'Đang giải mã âm thanh...';
-      toast(`Đang kết xuất đoạn nhạc ${fmt(start)} ➔ ${fmt(end)} (${format.toUpperCase()})...`);
+      toast(`Đang kết xuất âm thanh timeline (${fmt(totalDur)}) sang ${format.toUpperCase()}...`);
 
       const rawBuf = await getDecodedAudioBuffer();
       if (!rawBuf) {
@@ -2029,21 +2744,44 @@ export function initStudio() {
         return toast('Không đọc được dữ liệu âm thanh để xuất.');
       }
 
-      if (statusEl) statusEl.textContent = 'Đang xử lý âm lượng & fade...';
-      const rendered = await renderTrimmedAudio(rawBuf, {
-        start,
-        end,
-        vol: A.vol,
-        fadeIn: A.fadeIn,
-        fadeOut: A.fadeOut
+      if (statusEl) statusEl.textContent = 'Đang ghép các đoạn & áp dụng âm lượng...';
+      const sampleRate = rawBuf.sampleRate;
+      const numChannels = rawBuf.numberOfChannels;
+      const totalFrames = Math.max(1, Math.ceil(totalDur * sampleRate));
+      const offlineCtx = new OfflineAudioContext(numChannels, totalFrames, sampleRate);
+
+      blocks.forEach(b => {
+        const src = offlineCtx.createBufferSource();
+        src.buffer = rawBuf;
+        const gain = offlineCtx.createGain();
+        gain.gain.value = A.vol;
+        src.connect(gain);
+        gain.connect(offlineCtx.destination);
+        src.start(b.start, b.srcIn, b.dur);
       });
+
+      const rendered = await offlineCtx.startRendering();
+
+      // Apply fade in & fade out if specified
+      if (A.fadeIn > 0 || A.fadeOut > 0) {
+        for (let ch = 0; ch < rendered.numberOfChannels; ch++) {
+          const data = rendered.getChannelData(ch);
+          const fadeInFrames = Math.floor(Math.min(A.fadeIn, totalDur) * sampleRate);
+          for (let i = 0; i < fadeInFrames; i++) {
+            data[i] *= (i / fadeInFrames);
+          }
+          const fadeOutFrames = Math.floor(Math.min(A.fadeOut, totalDur) * sampleRate);
+          const startFadeOut = totalFrames - fadeOutFrames;
+          for (let i = startFadeOut; i < totalFrames; i++) {
+            data[i] *= Math.max(0, (totalFrames - i) / fadeOutFrames);
+          }
+        }
+      }
 
       const cleanName = (A.name || 'audio')
         .replace(/\.[^/.]+$/, '')
         .replace(/[^a-zA-Z0-9_\-\u00C0-\u024F\u1EA0-\u1EF9]/g, '_');
-      const startTag = fmt(start).replace(':', 'm');
-      const endTag = fmt(end).replace(':', 'm');
-      const baseFilename = `${cleanName}_cut_${startTag}-${endTag}`;
+      const baseFilename = `${cleanName}_timeline_${fmt(totalDur).replace(':', 'm')}`;
 
       if (format === 'wav') {
         if (statusEl) statusEl.textContent = 'Đang tạo file WAV...';
@@ -2065,7 +2803,7 @@ export function initStudio() {
       if (statusEl) {
         statusEl.textContent = `✓ Đã xuất ${format.toUpperCase()} thành công!`;
         setTimeout(() => {
-          if (statusEl) statusEl.textContent = 'Đoạn chọn + Âm lượng + Fade';
+          if (statusEl) statusEl.textContent = prevStatus;
         }, 3500);
       }
     } catch (err: any) {
@@ -2076,7 +2814,7 @@ export function initStudio() {
   }
 
   async function startAudio() {
-    if (!A.loaded) return;
+    if (!A.loaded || !S.audioBlocks.length) return;
     ensureGraph();
     if (A.ctx && A.ctx.state === 'suspended') {
       try {
@@ -2084,10 +2822,12 @@ export function initStudio() {
         toast('Đã kích hoạt AudioContext (' + A.ctx.state + ')');
       } catch (e) {}
     }
-    const want = A.start + S.t;
-    const effectiveEnd = A.end > A.start ? A.end : A.dur;
-    if (want >= effectiveEnd) return;
-    A.el.currentTime = want;
+    const act = getActiveAudioAt(S.t);
+    if (!act) {
+      if (!A.el.paused) A.el.pause();
+      return;
+    }
+    A.el.currentTime = act.fileSec;
     A.el.preservesPitch = true;
     (A.el as any).webkitPreservesPitch = true;
     (A.el as any).mozPreservesPitch = true;
@@ -2097,25 +2837,24 @@ export function initStudio() {
       await A.el.play();
     } catch (e: any) {
       console.warn('Audio play error:', e);
-      setAudioError('Không thể phát thẻ audio: ' + (e?.message || e));
+      setAudioError('Không thể phát nhạc: ' + (e?.message || e));
     }
     updateAudioStatus();
     startVUMeter();
   }
 
   function syncAudio() {
-    if (!A.loaded) return;
-    const want = A.start + S.t;
-    const effectiveEnd = A.end > A.start ? A.end : A.dur;
-    if (want >= effectiveEnd) {
+    if (!A.loaded || !S.audioBlocks.length) return;
+    const act = getActiveAudioAt(S.t);
+    if (!act) {
       if (!A.el.paused) A.el.pause();
       return;
     }
-    if (want < effectiveEnd && A.el.paused) {
+    if (act && A.el.paused && S.playing) {
       A.el.play().catch(() => {});
     }
-    if (Math.abs(A.el.currentTime - want) > 0.4) {
-      A.el.currentTime = want;
+    if (Math.abs(A.el.currentTime - act.fileSec) > 0.35) {
+      A.el.currentTime = act.fileSec;
     }
     applyVol(false);
   }
@@ -2163,10 +2902,12 @@ export function initStudio() {
     syncAudio();
     draw();
     updateUI();
+    updateActiveLyricCard(S.t);
     raf = requestAnimationFrame(tick);
   }
   function play() {
     if (S.playing || !S.clips.length) return;
+    stopTransitionPreview();
     if (A.isPreviewing) stopPreview();
     if (S.t >= total() - 0.01) S.t = 0;
     S.playing = true;
@@ -2195,23 +2936,27 @@ export function initStudio() {
     updateUI();
     const cb = endCb;
     endCb = null;
-    if (tap.on) endTap();
     if (cb) cb();
   }
   function seek(t: number) {
+    stopTransitionPreview();
     S.t = clamp(t, 0, total());
     if (S.playing) {
       tbase = S.t;
       t0 = performance.now();
     }
-    const want = A.start + S.t;
-    const effectiveEnd = A.end > A.start ? A.end : A.dur;
-    if (A.loaded && want <= effectiveEnd) {
-      A.el.currentTime = want;
+    if (A.loaded) {
+      const act = getActiveAudioAt(S.t);
+      if (act) {
+        A.el.currentTime = act.fileSec;
+      } else if (!A.el.paused) {
+        A.el.pause();
+      }
     }
     syncVideos(S.t, S.playing);
     draw();
     updateUI();
+    updateActiveLyricCard(S.t);
   }
 
   /* ---------- giao diện ---------- */
@@ -2304,9 +3049,10 @@ export function initStudio() {
     }
   }
   function renderTimeline() {
-    const T = Math.max(total(), A.loaded ? Math.max(A.dur - A.start, 0) : 0, 10), pps = S.pps;
-    const width = Math.ceil(T * pps) + 60;
-    $('#tl').style.width = width + 'px';
+    const T = Math.max(total(), A.loaded ? audioTrackEnd() : 0, 10), pps = S.pps;
+    const width = Math.ceil(T * pps) + 80;
+    const tlEl = $('#tl');
+    if (tlEl) tlEl.style.width = width + 'px';
     const stepT = pps >= 90 ? 1 : pps >= 45 ? 2 : pps >= 28 ? 5 : 10;
     let r = '';
     for (let s = 0; s <= T + 1; s += 1) {
@@ -2314,61 +3060,181 @@ export function initStudio() {
       if (s % stepT === 0) r += '<i style="left:' + x + 'px;height:12px"></i><span style="left:' + x + 'px">' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + '</span>';
       else if (pps >= 30) r += '<i style="left:' + x + 'px"></i>';
     }
-    $('#ruler').innerHTML = r;
+    const rulerEl = $('#ruler');
+    if (rulerEl) rulerEl.innerHTML = r;
     let a = 0, h = '';
     S.clips.forEach((c, i) => {
       const w = Math.max(8, c.dur * pps - 2);
       const trw = i > 0 && c.tr !== 'none' ? Math.min(c.trDur, c.dur, S.clips[i - 1].dur) * pps : 0;
+      const trName = TR[c.tr] || c.tr;
       h += '<div class="clip' + (c.id === S.sel ? ' sel' : '') + '" data-id="' + c.id + '" style="left:' + (a * pps) + 'px;width:' + w + 'px;background-image:url(' + c.thumb + ')">'
-        + (trw ? '<i class="trz" style="width:' + Math.min(trw, w) + 'px" title="Chuyển cảnh"></i>' : '')
+        + (trw ? '<i class="trz" style="width:' + Math.min(trw, w) + 'px" title="Chuyển cảnh: ' + esc(trName) + ' (' + c.trDur.toFixed(1) + 's)"></i>' : '')
         + '<span class="cn">' + esc(c.name) + '</span><span class="cd">' + c.dur.toFixed(1) + 's</span><span class="kind">' + (c.type === 'video' ? 'video' : 'ảnh') + '</span></div>';
       a += c.dur;
     });
-    $('#clips').innerHTML = h;
+    const clipsEl = $('#clips');
+    if (clipsEl) clipsEl.innerHTML = h;
+
+    // Render Audio Lane (#alane)
     const al = $('#alane');
-    if (A.loaded) {
-      const segDur = musicDuration();
-      const aw = Math.ceil(Math.max(segDur, 0) * pps);
-      al.style.width = aw + 'px';
-      al.innerHTML = '<canvas></canvas>';
-      const c = al.firstChild as HTMLCanvasElement, cw = Math.min(aw, 8000);
-      c.width = Math.max(cw, 1);
-      c.height = 44;
-      c.style.width = aw + 'px';
-      const x = c.getContext('2d')!, inside = total();
-      x.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0a8';
-      const per = 20;
-      for (let px = 0; px < cw; px++) {
-        const tt = (px / cw) * segDur + A.start;
-        const pk = A.peaks[Math.min(A.peaks.length - 1, Math.floor(tt * per))] || 0;
-        const hh = Math.max(1, pk * 40);
-        x.globalAlpha = (px / cw) * segDur <= inside ? 0.95 : 0.3;
-        x.fillRect(px, 22 - hh / 2, 1, hh);
+    if (al) {
+      if (A.loaded && S.audioBlocks.length > 0) {
+        let ah = '';
+        S.audioBlocks.forEach(b => {
+          const isSel = b.id === S.selAudioId;
+          const leftPx = b.start * pps;
+          const wPx = Math.max(16, b.dur * pps);
+          ah += '<div class="audio-block' + (isSel ? ' sel' : '') + '" data-aid="' + b.id + '" style="left:' + leftPx + 'px;width:' + wPx + 'px;">'
+            + (isSel ? '<div class="audio-handle left" data-aid="' + b.id + '" title="Kéo để cắt / khôi phục đầu nhạc">◀</div>' : '')
+            + '<canvas data-aid="' + b.id + '"></canvas>'
+            + '<span class="audio-block-title">' + esc(A.name || 'Nhạc') + '</span>'
+            + '<span class="audio-block-time">' + fmt(b.dur) + '</span>'
+            + (isSel ? '<div class="audio-handle right" data-aid="' + b.id + '" title="Kéo để cắt / khôi phục đuôi nhạc">▶</div>' : '')
+            + '</div>';
+        });
+        al.innerHTML = ah;
+
+        // Draw waveform slices on each audio block's canvas
+        const per = 20;
+        const peaks = A.peaks.length ? A.peaks : A.rawPeaks;
+        S.audioBlocks.forEach(b => {
+          const blockEl = al.querySelector('.audio-block[data-aid="' + b.id + '"]');
+          if (!blockEl) return;
+          const cvEl = blockEl.querySelector('canvas') as HTMLCanvasElement | null;
+          if (!cvEl) return;
+          const w = Math.max(1, Math.min(Math.ceil(b.dur * pps), 4000));
+          cvEl.width = w;
+          cvEl.height = 44;
+          cvEl.style.width = '100%';
+          cvEl.style.height = '44px';
+          const cx = cvEl.getContext('2d');
+          if (!cx) return;
+          cx.clearRect(0, 0, w, 44);
+          cx.fillStyle = b.id === S.selAudioId ? '#00f0ff' : '#2dd4bf';
+          if (peaks.length) {
+            for (let px = 0; px < w; px++) {
+              const fileSec = b.srcIn + (px / w) * b.dur;
+              const pkIdx = Math.min(peaks.length - 1, Math.floor(fileSec * per));
+              const pk = (pkIdx >= 0 && peaks[pkIdx]) || 0;
+              const hh = Math.max(2, pk * 40);
+              cx.fillRect(px, 22 - hh / 2, 1, hh);
+            }
+          } else {
+            cx.fillRect(0, 21, w, 2);
+          }
+
+          // Vẽ đường Fade In và Fade Out trực tiếp trên sóng âm
+          const aTotalEnd = audioTrackEnd();
+          if (A.fadeIn > 0 && b.start < A.fadeIn) {
+            const inSec = Math.min(b.start + b.dur, A.fadeIn) - b.start;
+            const inPx = (inSec / b.dur) * w;
+            cx.save();
+            const gIn = cx.createLinearGradient(0, 0, inPx, 0);
+            gIn.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
+            gIn.addColorStop(1, 'rgba(0, 0, 0, 0.05)');
+            cx.fillStyle = gIn;
+            cx.beginPath();
+            cx.moveTo(0, 0);
+            cx.lineTo(inPx, 0);
+            cx.lineTo(0, 44);
+            cx.closePath();
+            cx.fill();
+
+            cx.strokeStyle = '#00f0ff';
+            cx.lineWidth = 2;
+            cx.setLineDash([4, 2]);
+            cx.beginPath();
+            cx.moveTo(0, 42);
+            cx.lineTo(inPx, 3);
+            cx.stroke();
+
+            cx.fillStyle = '#00f0ff';
+            cx.font = 'bold 9px var(--font-mono)';
+            cx.fillText('Fade In ' + A.fadeIn + 's', 6, 12);
+            cx.restore();
+          }
+
+          if (A.fadeOut > 0 && b.start + b.dur > aTotalEnd - A.fadeOut) {
+            const outStartSec = Math.max(b.start, aTotalEnd - A.fadeOut);
+            const outPx = ((outStartSec - b.start) / b.dur) * w;
+            cx.save();
+            const gOut = cx.createLinearGradient(outPx, 0, w, 0);
+            gOut.addColorStop(0, 'rgba(0, 0, 0, 0.05)');
+            gOut.addColorStop(1, 'rgba(0, 0, 0, 0.65)');
+            cx.fillStyle = gOut;
+            cx.beginPath();
+            cx.moveTo(outPx, 0);
+            cx.lineTo(w, 0);
+            cx.lineTo(w, 44);
+            cx.closePath();
+            cx.fill();
+
+            cx.strokeStyle = '#ff007f';
+            cx.lineWidth = 2;
+            cx.setLineDash([4, 2]);
+            cx.beginPath();
+            cx.moveTo(outPx, 3);
+            cx.lineTo(w, 42);
+            cx.stroke();
+
+            cx.fillStyle = '#ff007f';
+            cx.font = 'bold 9px var(--font-mono)';
+            cx.textAlign = 'right';
+            cx.fillText('Fade Out ' + A.fadeOut + 's', w - 6, 12);
+            cx.restore();
+          }
+        });
+      } else {
+        al.innerHTML = '<span class="empty">Chưa có nhạc. Thêm ở tab Nhạc hoặc kéo thả file vào đây.</span>';
       }
-    } else {
-      al.style.width = '100%';
-      al.innerHTML = '<span class="empty">Chưa có nhạc. Thêm ở tab Nhạc.</span>';
     }
+
+    // Render Lyric Lane (#llane)
     let l = '';
     S.lyr.forEach((ly, i) => {
-      const nx = S.lyr[i + 1], w = Math.max(10, ((nx ? nx.t : ly.t + 3) - ly.t) * pps - 3);
-      l += '<b style="left:' + (ly.t * pps) + 'px;width:' + w + 'px">' + esc(ly.text || '(trống)') + '</b>';
+      const isSel = ly.id === S.selLyrId;
+      const endT = ly.endT || ((S.lyr[i + 1]?.t) || (ly.t + 3));
+      const dur = Math.max(0.2, endT - ly.t);
+      const w = Math.max(16, dur * pps - 2);
+
+      const prev = S.lyr[i - 1];
+      const next = S.lyr[i + 1];
+      const isOverlap = (prev && ly.t < (prev.endT || (prev.t + 0.1)) - 0.05) || (next && endT > next.t + 0.05);
+
+      l += '<div class="lyr-block' + (isSel ? ' sel' : '') + (isOverlap ? ' overlap' : '') + '" data-lid="' + ly.id + '" style="left:' + (ly.t * pps) + 'px;width:' + w + 'px" title="' + esc(ly.text) + ' [' + fmt(ly.t) + ' ➔ ' + fmt(endT) + ']' + (isOverlap ? ' (CẢNH BÁO: Chồng giờ với câu khác!)' : '') + '">'
+        + (isSel ? '<span class="lyr-handle left" data-lid="' + ly.id + '" title="Kéo mép trái để đổi giờ bắt đầu"></span>' : '')
+        + '<span class="lyr-idx">#' + (i + 1) + '</span>'
+        + '<span class="lyr-txt">' + esc(ly.text || '(trống)') + '</span>'
+        + (isSel ? '<span class="lyr-handle right" data-lid="' + ly.id + '" title="Kéo mép phải để đổi giờ kết thúc"></span>' : '')
+        + '</div>';
     });
-    $('#llane').innerHTML = l;
+    const llaneEl = $('#llane');
+    if (llaneEl) llaneEl.innerHTML = l;
+
     updateInspector();
     updateUI();
   }
   function selClip() { return S.clips.find(c => c.id === S.sel) || null; }
+  function selAudioBlock() { return S.audioBlocks.find(b => b.id === S.selAudioId) || null; }
   function updateInspector() {
-    const c = selClip(), ids = ['iDur', 'iIn', 'iOut', 'iFit', 'iFx', 'iTr', 'iTrD', 'iCol', 'iL', 'iR', 'iDup', 'iDel'];
+    const c = selClip();
+    const ab = selAudioBlock();
+    const ids = ['iDur', 'iIn', 'iOut', 'iFit', 'iFx', 'iTr', 'iTrD', 'iCol', 'iL', 'iR', 'iDup', 'iDel'];
     ids.forEach(i => { const el = $('#' + i); if (el) el.disabled = !c; });
-    $('#iName').textContent = c ? c.name : 'Chọn một clip trên timeline để chỉnh.';
+    const btnPrevClipTr = $('#btnPreviewClipTr');
+    if (btnPrevClipTr) btnPrevClipTr.disabled = !c;
+
+    if (ab) {
+      $('#iName').textContent = 'Đoạn nhạc: ' + (A.name || 'Nhạc') + ' [' + fmt(ab.dur) + '] (' + fmt(ab.srcIn) + ' ➔ ' + fmt(ab.srcOut) + ')';
+    } else {
+      $('#iName').textContent = c ? c.name : 'Chọn một clip hoặc đoạn nhạc trên timeline để chỉnh.';
+    }
     if (!c) return;
     const v = c.type === 'video';
     $('#gDur').hidden = v;
     $('#gIn').hidden = !v;
     $('#gOut').hidden = !v;
-    $('#iDur').value = c.dur.toFixed(1);
+    $('#iDur').value = c.dur.toFixed(2);
     $('#iIn').value = c.srcIn.toFixed(1);
     $('#iOut').value = c.srcOut.toFixed(1);
     $('#iOut').max = c.full;
@@ -2390,6 +3256,15 @@ export function initStudio() {
     if (!el) return;
     el.innerHTML = Object.entries(obj).map(([k, v]) => '<option value="' + k + '">' + v + '</option>').join('');
   }
+  function fillGrouped(sel: string, groups: typeof TR_GROUPS) {
+    const el = $(sel);
+    if (!el) return;
+    el.innerHTML = groups.map(g =>
+      '<optgroup label="' + g.group + '">' +
+      g.items.map(it => '<option value="' + it.key + '">' + it.label + '</option>').join('') +
+      '</optgroup>'
+    ).join('');
+  }
 
   /* ---------- dời / nhân bản / cắt clip ---------- */
   function moveClip(d: number) {
@@ -2408,6 +3283,7 @@ export function initStudio() {
     if (!L) return toast('Chưa có clip để cắt.');
     const c = S.clips[L.i], local = L.local;
     if (local < 0.2 || c.dur - local < 0.2) return toast('Đưa đầu phát vào giữa clip (cách mép ít nhất 0,2 giây) rồi cắt.');
+    pushTimelineHistory();
     const n = cloneClip(c);
     n.tr = 'none';
     if (c.type === 'image') {
@@ -2426,6 +3302,131 @@ export function initStudio() {
     S.sel = n.id;
     refreshAll();
     toast('Đã cắt thành hai clip.');
+  }
+
+  function splitAtPlayhead() {
+    // 1. Tách đoạn nhạc nếu đầu phát nằm trong đoạn nhạc
+    const bIdx = S.audioBlocks.findIndex(b => S.t > b.start + 0.1 && S.t < b.start + b.dur - 0.1);
+    if (bIdx >= 0) {
+      pushTimelineHistory();
+      const b = S.audioBlocks[bIdx];
+      const cutPos = S.t - b.start;
+      const b1: AudioBlock = {
+        id: b.id,
+        start: b.start,
+        srcIn: b.srcIn,
+        srcOut: b.srcIn + cutPos,
+        dur: cutPos
+      };
+      const b2: AudioBlock = {
+        id: ++audioUid,
+        start: S.t,
+        srcIn: b.srcIn + cutPos,
+        srcOut: b.srcOut,
+        dur: b.dur - cutPos
+      };
+      S.audioBlocks.splice(bIdx, 1, b1, b2);
+      S.selAudioId = b2.id;
+      S.sel = null;
+      S.selLyrId = null;
+      autoFitImagesToMusic();
+      refreshAll();
+      toast('Đã tách đoạn nhạc thành 2 phần tại ' + fmt(S.t));
+      return;
+    }
+
+    // 2. Tách clip nếu đầu phát nằm trong clip
+    const L = locate(S.t);
+    if (L && L.local >= 0.2 && S.clips[L.i].dur - L.local >= 0.2) {
+      splitAtHead();
+      autoFitImagesToMusic();
+      return;
+    }
+    toast('Đưa đầu phát vào giữa đoạn nhạc hoặc clip để cắt.');
+  }
+
+  function deleteSelected() {
+    if (S.selAudioId != null) {
+      const idx = S.audioBlocks.findIndex(b => b.id === S.selAudioId);
+      if (idx >= 0) {
+        pushTimelineHistory();
+        S.audioBlocks.splice(idx, 1);
+        S.selAudioId = S.audioBlocks[Math.min(idx, S.audioBlocks.length - 1)]?.id ?? null;
+        autoFitImagesToMusic();
+        refreshAll();
+        toast('Đã xóa đoạn nhạc');
+        return;
+      }
+    }
+    if (S.sel != null) {
+      const i = S.clips.findIndex(c => c.id === S.sel);
+      if (i >= 0) {
+        pushTimelineHistory();
+        S.clips.splice(i, 1);
+        S.sel = S.clips[Math.min(i, S.clips.length - 1)]?.id ?? null;
+        autoFitImagesToMusic();
+        refreshAll();
+        toast('Đã xóa clip');
+        return;
+      }
+    }
+    if (S.selLyrId != null) {
+      deleteLyricLine();
+    }
+  }
+
+  function closeAudioGaps() {
+    if (!S.audioBlocks.length) return toast('Không có đoạn nhạc nào trên timeline.');
+    pushTimelineHistory();
+    S.audioBlocks.sort((a, b) => a.start - b.start);
+    let cur = 0;
+    S.audioBlocks.forEach(b => {
+      b.start = cur;
+      cur += b.dur;
+    });
+    autoFitImagesToMusic();
+    refreshAll();
+    toast('Đã nối liền các đoạn nhạc, xóa sạch khoảng trống.');
+  }
+
+  function applyAudioPreset(span: number | null) {
+    if (!A.loaded || A.dur <= 0) return toast('Hãy chọn file nhạc trước.');
+    pushTimelineHistory();
+    if (span == null || span >= A.dur) {
+      S.audioBlocks = [{
+        id: ++audioUid,
+        start: 0,
+        srcIn: 0,
+        srcOut: A.dur,
+        dur: A.dur
+      }];
+      S.selAudioId = S.audioBlocks[0].id;
+      S.sel = null;
+      S.selLyrId = null;
+      autoFitImagesToMusic();
+      seek(0);
+      refreshAll();
+      toast('Đã chọn toàn bộ bài hát (' + fmt(A.dur) + ')');
+      return;
+    }
+    let startSec = Math.max(0, S.t);
+    if (startSec + span > A.dur) {
+      startSec = Math.max(0, A.dur - span);
+    }
+    S.audioBlocks = [{
+      id: ++audioUid,
+      start: 0,
+      srcIn: startSec,
+      srcOut: startSec + span,
+      dur: span
+    }];
+    S.selAudioId = S.audioBlocks[0].id;
+    S.sel = null;
+    S.selLyrId = null;
+    autoFitImagesToMusic();
+    seek(0);
+    refreshAll();
+    toast('Đã chọn đoạn ' + span + 's (' + fmt(startSec) + ' ➔ ' + fmt(startSec + span) + ')');
   }
 
   /* ---------- font ---------- */
@@ -2455,7 +3456,6 @@ export function initStudio() {
     const mime = pickMime();
     if (!mime) return toast('Trình duyệt không có bộ ghi video phù hợp.');
     pause();
-    endTap();
     await loadFonts();
     const stream: MediaStream = (cv as any).captureStream(30);
     if (A.loaded && ensureGraph()) {
@@ -2574,10 +3574,53 @@ export function initStudio() {
     const isInput = ['INPUT', 'SELECT', 'TEXTAREA'].includes(tg) || (e.target as HTMLElement).isContentEditable;
     if (isInput) return;
 
+    // Phím Escape: Đóng modal danh sách phím tắt
+    if (e.code === 'Escape' || e.key === 'Escape') {
+      const modal = $('#shortcutsModal');
+      if (modal && !modal.hidden) {
+        e.preventDefault();
+        modal.hidden = true;
+        return;
+      }
+    }
+
+    // Phím Ctrl+Z / Ctrl+Y (hoặc Ctrl+Shift+Z, Cmd+Z/Y) cho Hoàn tác / Làm lại
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      if (e.key === 'z' || e.key === 'Z') {
+        e.preventDefault();
+        if (currentLyrStep === 2) {
+          tapUndoLine();
+        } else {
+          if (e.shiftKey) redoTimeline();
+          else undoTimeline();
+        }
+        return;
+      }
+      if (e.key === 'y' || e.key === 'Y') {
+        e.preventDefault();
+        redoTimeline();
+        return;
+      }
+    }
+
     // Phím M: Tắt / Bật tiếng
     if (e.code === 'KeyM' || e.key === 'm' || e.key === 'M') {
       e.preventDefault();
       toggleMute();
+      return;
+    }
+
+    // Phím S: Tách đoạn nhạc hoặc clip tại đầu phát
+    if (e.code === 'KeyS' || e.key === 's' || e.key === 'S') {
+      e.preventDefault();
+      splitAtPlayhead();
+      return;
+    }
+
+    // Phím Delete / Backspace: Xóa phần đang chọn
+    if (e.code === 'Delete' || e.key === 'Delete' || e.code === 'Backspace' || e.key === 'Backspace') {
+      e.preventDefault();
+      deleteSelected();
       return;
     }
 
@@ -2590,34 +3633,13 @@ export function initStudio() {
       return;
     }
 
-    // Phím Space: Phát / Tạm dừng
+    // Phím Space: Phát / Tạm dừng hoặc Căn giờ câu (nếu đang ở Bước 2)
     if (e.code === 'Space') {
-      if (tap.on) {
-        e.preventDefault();
-        tapNext();
-        return;
-      }
-      if (tg === 'BUTTON' && !tap.on) return;
+      if (tg === 'BUTTON') return;
       e.preventDefault();
 
-      // Nếu đang mở tab Lyric: đặt mốc câu đang chọn
-      const lyrPane = document.querySelector('[data-pane="lyric"]') as HTMLElement | null;
-      const isLyrTabActive = lyrPane && !lyrPane.hidden;
-      if (isLyrTabActive) {
-        if (!S.playing) {
-          resumeAudioContext('Phím Space').then(() => { play(); });
-        }
-        const lag = +($('#tapLag') as HTMLInputElement)?.value || 0;
-        const targetTime = Math.max(0, S.t - lag);
-        setLineTime(lyrSelIdx, targetTime);
-        const rows = getLyricRows();
-        const autoNext = ($('#chkAutoNext') as HTMLInputElement)?.checked ?? true;
-        if (autoNext && lyrSelIdx < rows.length - 1) {
-          lyrSelIdx++;
-          updateLyricEditorUI();
-          renderLyricWaveform();
-        }
-        toast('Đã đặt mốc câu ' + (lyrSelIdx + 1) + ' tại ' + fmt(targetTime));
+      if (currentLyrStep === 2) {
+        tapMarkNow();
         return;
       }
 
@@ -2630,28 +3652,17 @@ export function initStudio() {
       }
       return;
     }
-
-    // Phím mũi tên (◀ / ▶) dời mốc lyric 0.05 giây
-    if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
-      const lyrPane = document.querySelector('[data-pane="lyric"]') as HTMLElement | null;
-      const isLyrTabActive = lyrPane && !lyrPane.hidden;
-      if (isLyrTabActive) {
-        e.preventDefault();
-        shiftLineTime(lyrSelIdx, e.code === 'ArrowLeft' ? -0.05 : 0.05);
-        return;
-      }
-    }
   }
   function onResize() {
     fitStage();
     renderWaveformEditor();
-    renderLyricWaveform();
   }
 
   function bind() {
-    fill('#defFx', FX); fill('#defTr', TR); fill('#iFx', FX); fill('#iTr', TR); fill('#iCol', COL);
+    fill('#defFx', FX); fillGrouped('#defTr', TR_GROUPS); fill('#iFx', FX); fillGrouped('#iTr', TR_GROUPS); fill('#iCol', COL);
     const defFxEl = $('#defFx'); if (defFxEl) defFxEl.value = S.def.fx;
     const defTrEl = $('#defTr'); if (defTrEl) defTrEl.value = S.def.tr;
+    const defTrDEl = $('#defTrD') as HTMLInputElement | null; if (defTrDEl) defTrDEl.value = String(S.def.trDur);
     const sFontEl = $('#sFont'); if (sFontEl) sFontEl.innerHTML = FONTS.map(f => '<option value="' + f + '" style="font-family:\'' + f + '\'">' + f + '</option>').join('');
 
     // Khởi tạo giá trị ban đầu cho các ô điều khiển sóng nhạc
@@ -2676,8 +3687,7 @@ export function initStudio() {
       document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', String(x === b)));
       document.querySelectorAll('[data-pane]').forEach((p: any) => { p.hidden = p.dataset.pane !== (b as any).dataset.tab; });
       if ((b as any).dataset.tab === 'lyric') {
-        renderLyricWaveform();
-        updateLyricEditorUI();
+        renderLyricUI();
       }
     }));
 
@@ -2709,13 +3719,28 @@ export function initStudio() {
     safeChange('#defFit', (e: any) => { S.def.fit = e.target.value; });
     safeChange('#defFx', (e: any) => { S.def.fx = e.target.value; });
     safeChange('#defTr', (e: any) => { S.def.tr = e.target.value; });
+    safeChange('#defTrD', (e: any) => { S.def.trDur = clamp(+e.target.value || 0.6, 0.1, 3); });
+    safeClick('#btnPreviewTr', () => {
+      const tr = ($('#defTr') as HTMLSelectElement)?.value || S.def.tr;
+      const dur = clamp(+($('#defTrD') as HTMLInputElement)?.value || S.def.trDur || 0.6, 0.1, 3);
+      previewTransition(tr, dur);
+    });
+    safeClick('#btnPreviewClipTr', () => {
+      const c = selClip();
+      const tr = ($('#iTr') as HTMLSelectElement)?.value || c?.tr || S.def.tr;
+      const dur = clamp(+($('#iTrD') as HTMLInputElement)?.value || c?.trDur || S.def.trDur || 0.6, 0.1, 3);
+      previewTransition(tr, dur);
+    });
     safeClick('#applyAll', () => {
       S.clips.forEach((c, i) => {
         if (c.type === 'image') { c.dur = S.def.dur; c.fx = S.def.fx; c.fit = S.def.fit; }
-        if (i > 0) c.tr = S.def.tr;
+        if (i > 0) {
+          c.tr = S.def.tr;
+          c.trDur = S.def.trDur;
+        }
       });
       refreshAll();
-      toast('Đã áp dụng cho tất cả clip.');
+      toast('Đã áp dụng chuyển động và chuyển cảnh (' + (TR[S.def.tr] || S.def.tr) + ') cho mọi clip.');
     });
 
     // nhạc & âm lượng đồng bộ
@@ -2746,66 +3771,44 @@ export function initStudio() {
       };
     }
 
-    const btnPre30 = $('#btnPreset30');
-    if (btnPre30) {
-      btnPre30.onclick = () => {
-        if (!A.loaded || A.dur <= 0) return toast('Hãy chọn file nhạc trước.');
-        const span = 30;
-        if (A.dur <= span) {
-          A.start = 0;
-          A.end = A.dur;
-        } else {
-          const cur = A.start;
-          if (cur + span <= A.dur) {
-            A.end = cur + span;
-          } else {
-            A.end = A.dur;
-            A.start = Math.max(0, A.dur - span);
-          }
-        }
-        renderWaveformEditor();
-        if (S.syncWithMusic) applyMusicSync();
-        renderTimeline();
-        toast('Đã chọn đoạn 30 giây (' + fmt(A.start) + ' - ' + fmt(A.end) + ') cho Reels / TikTok');
-      };
-    }
+    const applyPreset30 = () => applyAudioPreset(30);
+    const applyPreset60 = () => applyAudioPreset(60);
+    const applyPresetAll = () => applyAudioPreset(null);
 
-    const btnPre60 = $('#btnPreset60');
-    if (btnPre60) {
-      btnPre60.onclick = () => {
-        if (!A.loaded || A.dur <= 0) return toast('Hãy chọn file nhạc trước.');
-        const span = 60;
-        if (A.dur <= span) {
-          A.start = 0;
-          A.end = A.dur;
-        } else {
-          const cur = A.start;
-          if (cur + span <= A.dur) {
-            A.end = cur + span;
-          } else {
-            A.end = A.dur;
-            A.start = Math.max(0, A.dur - span);
-          }
-        }
-        renderWaveformEditor();
-        if (S.syncWithMusic) applyMusicSync();
-        renderTimeline();
-        toast('Đã chọn đoạn 60 giây (' + fmt(A.start) + ' - ' + fmt(A.end) + ') cho Shorts');
-      };
-    }
+    safeClick('#btnPreset30', applyPreset30);
+    safeClick('#btnPreset60', applyPreset60);
+    safeClick('#btnPresetAll', applyPresetAll);
+    safeClick('#btnTlPre30', applyPreset30);
+    safeClick('#btnTlPre60', applyPreset60);
+    safeClick('#btnTlPreAll', applyPresetAll);
+    safeClick('#btnTlUndo', undoTimeline);
+    safeClick('#btnTlRedo', redoTimeline);
+    safeClick('#btnTlSplit', splitAtPlayhead);
+    safeClick('#btnTlDelete', deleteSelected);
+    safeClick('#btnTlCloseGaps', closeAudioGaps);
+    safeClick('#tSplit', splitAtPlayhead);
 
-    const btnPreAll = $('#btnPresetAll');
-    if (btnPreAll) {
-      btnPreAll.onclick = () => {
-        if (!A.loaded || A.dur <= 0) return toast('Hãy chọn file nhạc trước.');
-        A.start = 0;
-        A.end = A.dur;
-        renderWaveformEditor();
-        if (S.syncWithMusic) applyMusicSync();
-        renderTimeline();
-        toast('Đã chọn toàn bộ bài hát (' + fmt(A.dur) + ')');
-      };
-    }
+    // Fade in / Fade out trên thanh công cụ timeline
+    safeChange('#tlFadeIn', (e: any) => {
+      pushTimelineHistory();
+      A.fadeIn = Math.max(0, parseFloat(e.target.value) || 0);
+      const aFadeIn = $('#aFadeIn') as HTMLInputElement | null;
+      if (aFadeIn) aFadeIn.value = String(A.fadeIn);
+      applyVol(A.isPreviewing || A.isTrimPreviewing);
+      renderTimeline();
+      renderWaveformEditor();
+      toast('Fade vào: ' + A.fadeIn + 's');
+    });
+    safeChange('#tlFadeOut', (e: any) => {
+      pushTimelineHistory();
+      A.fadeOut = Math.max(0, parseFloat(e.target.value) || 0);
+      const aFadeOut = $('#aFadeOut') as HTMLInputElement | null;
+      if (aFadeOut) aFadeOut.value = String(A.fadeOut);
+      applyVol(A.isPreviewing || A.isTrimPreviewing);
+      renderTimeline();
+      renderWaveformEditor();
+      toast('Fade ra: ' + A.fadeOut + 's');
+    });
 
     const inputTrimS = $('#aTrimStart');
     if (inputTrimS) {
@@ -3045,6 +4048,8 @@ export function initStudio() {
       A.name = '';
       A.loadState = 'Đã bỏ nhạc';
       A.error = '';
+      S.audioBlocks = [];
+      S.selAudioId = null;
       const aInfo = $('#audioInfo');
       if (aInfo) aInfo.textContent = 'Chưa có nhạc. Video vẫn xem và xuất được, chỉ là không có tiếng.';
       renderWaveformEditor();
@@ -3054,117 +4059,59 @@ export function initStudio() {
     });
     safeClick('#fitMusic', () => {
       if (!A.loaded) return toast('Hãy chọn nhạc trước.');
-      const imgs = S.clips.filter(c => c.type === 'image');
-      if (!imgs.length) return toast('Không có ảnh nào để chia.');
-      const vt = S.clips.filter(c => c.type === 'video').reduce((a, c) => a + c.dur, 0);
-      const rem = A.dur - A.start - vt;
-      if (rem <= 0) return toast('Nhạc ngắn hơn phần video đã có.');
-      const each = Math.max(0.5, Math.round(rem / imgs.length * 10) / 10);
-      imgs.forEach(c => { c.dur = each; });
+      autoFitImagesToMusic(true);
       refreshAll();
-      toast('Mỗi ảnh hiện ' + each.toFixed(1) + ' giây.');
     });
 
-    // lyric
-    safeOn('#lyr', 'input', (e: any) => {
-      S.lyr = parseLyr(e.target.value);
-      renderTimeline();
-      renderLyricWaveform();
-      updateLyricEditorUI();
-      draw();
-    });
-    safeClick('#tapStart', startTap);
-    safeClick('#tapBtn', tapNext);
-    safeClick('#tapEnd', endTap);
-    safeClick('#tapUndo', () => { if (tap.on && tap.i > 0) { tap.i--; tap.times[tap.i] = null; updateTap(); } });
-    safeClick('#tapBack3', jumpBack3s);
-    safeClick('#btnJumpBack3s', jumpBack3s);
+    // lyric: Bộ 3 bước (1. Nhập lời, 2. Căn giờ, 3. Chỉnh sửa)
+    safeClick('#btnLyrStep1', () => switchLyricStep(1));
+    safeClick('#btnLyrStep2', () => switchLyricStep(2));
+    safeClick('#btnLyrStep3', () => switchLyricStep(3));
 
-    // Tốc độ phát (0.5x, 0.75x, 1x)
-    safeClick('#btnSpeed05', () => setSpeed(0.5));
-    safeClick('#btnSpeed075', () => setSpeed(0.75));
-    safeClick('#btnSpeed1', () => setSpeed(1.0));
-
-    // Điều khiển câu lyric đang chọn
-    safeClick('#btnLyrPrev', () => selectLyricLine(lyrSelIdx - 1));
-    safeClick('#btnLyrNext', () => selectLyricLine(lyrSelIdx + 1));
-    safeClick('#btnLyrMinus005', () => shiftLineTime(lyrSelIdx, -0.05));
-    safeClick('#btnLyrPlus005', () => shiftLineTime(lyrSelIdx, 0.05));
-    safeClick('#btnLyrMarkNow', () => {
-      const lag = +($('#tapLag') as HTMLInputElement)?.value || 0;
-      const targetTime = Math.max(0, S.t - lag);
-      setLineTime(lyrSelIdx, targetTime);
-      const rows = getLyricRows();
-      const autoNext = ($('#chkAutoNext') as HTMLInputElement)?.checked ?? true;
-      if (autoNext && lyrSelIdx < rows.length - 1) {
-        lyrSelIdx++;
-        updateLyricEditorUI();
-        renderLyricWaveform();
-      }
-      toast('Đã đặt mốc câu ' + (lyrSelIdx + 1) + ' tại ' + fmt(targetTime));
-    });
-    safeClick('#btnPlayFromSel', () => {
-      const rows = getLyricRows();
-      if (rows[lyrSelIdx] && rows[lyrSelIdx].time != null) {
-        seek(rows[lyrSelIdx].time!);
-      }
-      if (!S.playing) {
-        resumeAudioContext('Nghe câu này').then(() => { play(); });
-      }
-    });
-
-    // Tương tác trực tiếp trên sóng âm lyric
-    const lyrTrack = $('#lyrWfTrack');
-    const lyrHover = $('#lyrWfHover');
-    const lyrHoverTime = $('#lyrWfHoverTime');
-
-    if (lyrTrack) {
-      lyrTrack.addEventListener('mousemove', (e: MouseEvent) => {
-        const r = lyrTrack.getBoundingClientRect();
-        const x = clamp(e.clientX - r.left, 0, r.width);
-        const dur = Math.max(total(), A.dur || 1);
-        const tHover = (x / r.width) * dur;
-        if (lyrHover) {
-          lyrHover.style.left = x + 'px';
-          lyrHover.style.display = 'block';
-        }
-        if (lyrHoverTime) {
-          lyrHoverTime.textContent = 'Mốc: ' + fmt(tHover) + ' (Bấm để gán câu ' + (lyrSelIdx + 1) + ')';
-        }
-      });
-
-      lyrTrack.addEventListener('mouseleave', () => {
-        if (lyrHover) lyrHover.style.display = 'none';
-        if (lyrHoverTime) lyrHoverTime.textContent = 'Bấm vào sóng để đặt mốc';
-      });
-
-      lyrTrack.addEventListener('click', (e: MouseEvent) => {
-        const r = lyrTrack.getBoundingClientRect();
-        const x = clamp(e.clientX - r.left, 0, r.width);
-        const dur = Math.max(total(), A.dur || 1);
-        const clickTime = (x / r.width) * dur;
-        setLineTime(lyrSelIdx, clickTime);
-        seek(clickTime);
-        toast('Đã gán câu ' + (lyrSelIdx + 1) + ' tại ' + fmt(clickTime));
-        const autoNext = ($('#chkAutoNext') as HTMLInputElement)?.checked ?? true;
-        const rows = getLyricRows();
-        if (autoNext && lyrSelIdx < rows.length - 1) {
-          lyrSelIdx++;
-          updateLyricEditorUI();
-          renderLyricWaveform();
-        }
-      });
-    }
-
-    safeClick('#lyrEven', evenLyrics);
-    safeClick('#lyrClear', () => setLyrText(rawLines().join('\n')));
-    safeClick('#shiftMinus', () => shiftLyr(-Math.abs(+$('#shiftV')?.value || 0)));
-    safeClick('#shiftPlus', () => shiftLyr(Math.abs(+$('#shiftV')?.value || 0)));
+    // Bước 1: Nhập lời
+    safeClick('#btnParseLyrics', createSentenceListFromRaw);
     safeOn('#fileLrc', 'change', async (e: any) => {
-      const f = e.target.files[0];
-      if (f) { setLyrText(await f.text()); toast('Đã nhập lời từ ' + f.name); }
+      const f = e.target.files?.[0];
+      if (!f) return;
+      try {
+        const txt = await f.text();
+        pushLyricHistory();
+        if (f.name.toLowerCase().endsWith('.srt') || txt.includes('-->')) {
+          S.lyr = parseSrt(txt);
+        } else {
+          S.lyr = parseLyr(txt);
+        }
+        const rawEl = $('#lyrRawInput') as HTMLTextAreaElement | null;
+        if (rawEl) rawEl.value = rawLyricLines().join('\n');
+        syncLyrToEditor(false);
+        toast(`Đã nhập ${S.lyr.length} câu từ file ${f.name}`);
+        switchLyricStep(3);
+      } catch (err) {
+        toast('Lỗi khi đọc file lời bài hát: ' + (err as any)?.message);
+      }
       e.target.value = '';
     });
+
+    // Bước 2: Căn giờ (Tap-to-sync)
+    safeClick('#btnTapMarkNow', tapMarkNow);
+    safeClick('#btnTapUndoLine', tapUndoLine);
+    safeClick('#btnTapSkipLine', tapSkipLine);
+    safeClick('#btnTapSpeed075', () => setSpeed(0.75));
+    safeClick('#btnTapSpeed1', () => setSpeed(1.0));
+    safeClick('#btnTapGoStep3', () => switchLyricStep(3));
+
+    // Bước 3: Chỉnh sửa thẻ câu & Nâng cao
+    safeClick('#btnBackToStep2', () => switchLyricStep(2));
+    safeClick('#btnCardAddAtHead', addLyricAtPlayhead);
+    safeClick('#shiftMinus', () => shiftLyr(-Math.abs(+$('#shiftV')?.value || 0.3)));
+    safeClick('#shiftPlus', () => shiftLyr(Math.abs(+$('#shiftV')?.value || 0.3)));
+    safeClick('#lyrClearAllTimes', clearAllTimes);
+
+    const cardsListEl = $('#lyrCardsList');
+    if (cardsListEl) {
+      cardsListEl.addEventListener('click', handleCardAction);
+      cardsListEl.addEventListener('change', handleCardChange);
+    }
 
     // chữ
     const st = S.style, redraw = () => draw();
@@ -3364,6 +4311,32 @@ export function initStudio() {
 
     // timeline
     safeInput('#zoom', (e: any) => { S.pps = +e.target.value; renderTimeline(); });
+    safeClick('#btnTlFitZoom', () => {
+      const sc = $('#tlScroll');
+      const dur = total();
+      if (!sc || dur <= 0) return;
+      const availW = Math.max(200, sc.clientWidth - 40);
+      const idealPps = clamp(Math.floor(availW / dur), 15, 200);
+      S.pps = idealPps;
+      const zoomInput = $('#zoom') as HTMLInputElement | null;
+      if (zoomInput) zoomInput.value = String(idealPps);
+      renderTimeline();
+      toast('Đã chỉnh zoom vừa khung (' + idealPps + 'px/s)');
+    });
+
+    const toggleShortcutsModal = (open: boolean) => {
+      const modal = $('#shortcutsModal');
+      if (modal) modal.hidden = !open;
+    };
+    safeClick('#btnKbShortcuts', () => toggleShortcutsModal(true));
+    safeClick('#btnCloseShortcuts', () => toggleShortcutsModal(false));
+    safeClick('#btnOkShortcuts', () => toggleShortcutsModal(false));
+    const scModalEl = $('#shortcutsModal');
+    if (scModalEl) {
+      scModalEl.addEventListener('click', (e: MouseEvent) => {
+        if (e.target === scModalEl) scModalEl.hidden = true;
+      });
+    }
     const tl = $('#tl');
     let drag = false;
     const scrubTo = (e: PointerEvent) => {
@@ -3373,9 +4346,18 @@ export function initStudio() {
     };
     if (tl) {
       tl.addEventListener('pointerdown', (e: PointerEvent) => {
-        const targetEl = (e.target as HTMLElement).closest('.clip') as HTMLElement | null;
+        const target = e.target as HTMLElement;
+        if (target.closest('#alane') || target.closest('#llane')) return;
+
+        const targetEl = target.closest('.clip') as HTMLElement | null;
         if (targetEl && targetEl.dataset.id) {
           S.sel = +targetEl.dataset.id;
+          S.selAudioId = null;
+          S.selLyrId = null;
+          renderTimeline();
+        } else {
+          S.selAudioId = null;
+          S.selLyrId = null;
           renderTimeline();
         }
         drag = true;
@@ -3383,9 +4365,273 @@ export function initStudio() {
         scrubTo(e);
       });
       tl.addEventListener('pointermove', (e: PointerEvent) => { if (drag) scrubTo(e); });
-      tl.addEventListener('pointerup', () => { drag = false; });
-      tl.addEventListener('pointercancel', () => { drag = false; });
+      tl.addEventListener('pointerup', (e: PointerEvent) => {
+        drag = false;
+        try { tl.releasePointerCapture(e.pointerId); } catch (err) {}
+      });
+      tl.addEventListener('pointercancel', (e: PointerEvent) => {
+        drag = false;
+        try { tl.releasePointerCapture(e.pointerId); } catch (err) {}
+      });
     }
+
+    // Tương tác trên track Nhạc (#alane)
+    const alaneEl = $('#alane');
+    const dragTip = $('#audioDragTip');
+    let aDragMode: 'body' | 'left' | 'right' | null = null;
+    let aDragBlock: AudioBlock | null = null;
+    let aStartX = 0;
+    let aInitStart = 0;
+    let aInitSrcIn = 0;
+    let aInitSrcOut = 0;
+    let aDragHasChanged = false;
+    let preDragState: TimelineHistoryState | null = null;
+
+    if (alaneEl) {
+      alaneEl.addEventListener('pointerdown', (e: PointerEvent) => {
+        if (!A.loaded || !S.audioBlocks.length) return;
+        const target = e.target as HTMLElement;
+        const handleLeft = target.closest('.audio-handle.left');
+        const handleRight = target.closest('.audio-handle.right');
+        const blockEl = target.closest('.audio-block') as HTMLElement | null;
+
+        if (blockEl) {
+          e.stopPropagation();
+          e.preventDefault();
+          const aid = +(blockEl.dataset.aid || 0);
+          const block = S.audioBlocks.find(b => b.id === aid);
+          if (!block) return;
+
+          preDragState = {
+            clips: S.clips.map(c => ({ ...c })),
+            audioBlocks: S.audioBlocks.map(b => ({ ...b })),
+            selAudioId: S.selAudioId,
+            sel: S.sel,
+            selLyrId: S.selLyrId,
+            lyr: S.lyr.map(item => ({ ...item })),
+            lrcText: ($('#lyr') as HTMLTextAreaElement)?.value || '',
+            fadeIn: A.fadeIn,
+            fadeOut: A.fadeOut
+          };
+          aDragHasChanged = false;
+
+          S.selAudioId = block.id;
+          S.sel = null;
+          S.selLyrId = null;
+
+          aDragBlock = block;
+          aStartX = e.clientX;
+          aInitStart = block.start;
+          aInitSrcIn = block.srcIn;
+          aInitSrcOut = block.srcOut;
+
+          if (handleLeft) {
+            aDragMode = 'left';
+          } else if (handleRight) {
+            aDragMode = 'right';
+          } else {
+            aDragMode = 'body';
+          }
+
+          alaneEl.setPointerCapture(e.pointerId);
+          renderTimeline();
+
+          if (dragTip) {
+            dragTip.style.display = 'block';
+            dragTip.textContent = aDragMode === 'left'
+              ? `◀ Cắt đầu: ${fmt(block.srcIn)} | Dài: ${block.dur.toFixed(2)}s`
+              : aDragMode === 'right'
+              ? `▶ Cắt đuôi: ${fmt(block.srcOut)} | Dài: ${block.dur.toFixed(2)}s`
+              : `↔ Vị trí: ${fmt(block.start)} ➔ ${fmt(block.start + block.dur)}`;
+            const tlScroll = $('#tlScroll');
+            const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, width: 600 };
+            dragTip.style.left = clamp(e.clientX - tlRect.left, 20, tlRect.width - 150) + 'px';
+            dragTip.style.top = '100px';
+          }
+          return;
+        }
+
+        // Click ngoài khối nhạc trên alane: dời đầu phát
+        const tlEl = $('#tl');
+        if (tlEl) {
+          const r = tlEl.getBoundingClientRect();
+          seek((e.clientX - r.left) / S.pps);
+        }
+      });
+
+      alaneEl.addEventListener('pointermove', (e: PointerEvent) => {
+        if (!aDragMode || !aDragBlock) return;
+        const deltaPx = e.clientX - aStartX;
+        if (Math.abs(deltaPx) > 1) aDragHasChanged = true;
+        const deltaSec = deltaPx / S.pps;
+        const durLimit = A.dur || 999999;
+        const minDur = 0.3;
+
+        if (aDragMode === 'left') {
+          const newSrcIn = clamp(aInitSrcIn + deltaSec, 0, aInitSrcOut - minDur);
+          const actualShift = newSrcIn - aInitSrcIn;
+          aDragBlock.srcIn = newSrcIn;
+          aDragBlock.start = Math.max(0, aInitStart + actualShift);
+          aDragBlock.dur = aDragBlock.srcOut - aDragBlock.srcIn;
+
+          if (dragTip) {
+            dragTip.textContent = `◀ Cắt đầu: ${fmt(aDragBlock.srcIn)} | Dài: ${aDragBlock.dur.toFixed(2)}s`;
+            const tlScroll = $('#tlScroll');
+            const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, width: 600 };
+            dragTip.style.left = clamp(e.clientX - tlRect.left, 20, tlRect.width - 150) + 'px';
+          }
+        } else if (aDragMode === 'right') {
+          const newSrcOut = clamp(aInitSrcOut + deltaSec, aInitSrcIn + minDur, durLimit);
+          aDragBlock.srcOut = newSrcOut;
+          aDragBlock.dur = aDragBlock.srcOut - aDragBlock.srcIn;
+
+          if (dragTip) {
+            dragTip.textContent = `▶ Cắt đuôi: ${fmt(aDragBlock.srcOut)} | Dài: ${aDragBlock.dur.toFixed(2)}s`;
+            const tlScroll = $('#tlScroll');
+            const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, width: 600 };
+            dragTip.style.left = clamp(e.clientX - tlRect.left, 20, tlRect.width - 150) + 'px';
+          }
+        } else if (aDragMode === 'body') {
+          aDragBlock.start = Math.max(0, parseFloat((aInitStart + deltaSec).toFixed(2)));
+
+          if (dragTip) {
+            dragTip.textContent = `↔ Vị trí: ${fmt(aDragBlock.start)} ➔ ${fmt(aDragBlock.start + aDragBlock.dur)}`;
+            const tlScroll = $('#tlScroll');
+            const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, width: 600 };
+            dragTip.style.left = clamp(e.clientX - tlRect.left, 20, tlRect.width - 180) + 'px';
+          }
+        }
+
+        renderTimeline();
+      });
+
+      const endAudioDrag = (e: PointerEvent) => {
+        if (aDragMode) {
+          if (aDragHasChanged && preDragState) {
+            tlUndoStack.push(preDragState);
+            if (tlUndoStack.length > 50) tlUndoStack.shift();
+            tlRedoStack.length = 0;
+            updateUndoRedoUI();
+          }
+          aDragMode = null;
+          aDragBlock = null;
+          preDragState = null;
+          aDragHasChanged = false;
+          try { alaneEl.releasePointerCapture(e.pointerId); } catch (err) {}
+          if (dragTip) dragTip.style.display = 'none';
+          autoFitImagesToMusic();
+          refreshAll();
+        }
+      };
+      alaneEl.addEventListener('pointerup', endAudioDrag);
+      alaneEl.addEventListener('pointercancel', endAudioDrag);
+    }
+
+    // Tương tác trên track Lyric (#llane)
+    const llaneEl = $('#llane');
+    let lyrDragMode: 'body' | 'left' | 'right' | null = null;
+    let lyrDragItem: LyricItem | null = null;
+    let lyrStartX = 0;
+    let lyrInitT = 0;
+    let lyrInitEndT = 0;
+
+    if (llaneEl) {
+      llaneEl.addEventListener('pointerdown', (e: PointerEvent) => {
+        const target = e.target as HTMLElement;
+        const blockEl = target.closest('.lyr-block') as HTMLElement | null;
+        if (!blockEl) return;
+
+        e.stopPropagation();
+        e.preventDefault();
+
+        const lid = +(blockEl.dataset.lid || 0);
+        const ly = S.lyr.find(l => l.id === lid);
+        if (!ly) return;
+
+        selectLyrBlock(ly.id);
+        seek(ly.t);
+
+        const handleLeft = target.closest('.lyr-handle.left');
+        const handleRight = target.closest('.lyr-handle.right');
+
+        lyrDragItem = ly;
+        lyrStartX = e.clientX;
+        lyrInitT = ly.t;
+        lyrInitEndT = ly.endT || (ly.t + 3);
+
+        if (handleLeft) lyrDragMode = 'left';
+        else if (handleRight) lyrDragMode = 'right';
+        else lyrDragMode = 'body';
+
+        llaneEl.setPointerCapture(e.pointerId);
+      });
+
+      llaneEl.addEventListener('pointermove', (e: PointerEvent) => {
+        if (!lyrDragMode || !lyrDragItem) return;
+        const deltaPx = e.clientX - lyrStartX;
+        const step = e.shiftKey ? 0.01 : 0.05;
+        let deltaSec = deltaPx / S.pps;
+        deltaSec = Math.round(deltaSec / step) * step;
+
+        if (lyrDragMode === 'left') {
+          const newT = Math.max(0, Math.min(lyrInitT + deltaSec, (lyrDragItem.endT || 999) - 0.2));
+          lyrDragItem.t = parseFloat(newT.toFixed(2));
+        } else if (lyrDragMode === 'right') {
+          const newEnd = Math.max(lyrDragItem.t + 0.2, lyrInitEndT + deltaSec);
+          lyrDragItem.endT = parseFloat(newEnd.toFixed(2));
+        } else if (lyrDragMode === 'body') {
+          const dur = (lyrDragItem.endT || (lyrDragItem.t + 3)) - lyrDragItem.t;
+          const newT = Math.max(0, lyrInitT + deltaSec);
+          lyrDragItem.t = parseFloat(newT.toFixed(2));
+          lyrDragItem.endT = parseFloat((newT + dur).toFixed(2));
+        }
+        renderTimeline();
+        draw();
+      });
+
+      const endLyrDrag = (e: PointerEvent) => {
+        if (lyrDragMode) {
+          lyrDragMode = null;
+          lyrDragItem = null;
+          try { llaneEl.releasePointerCapture(e.pointerId); } catch (err) {}
+          syncLyrToEditor(true);
+        }
+      };
+      llaneEl.addEventListener('pointerup', endLyrDrag);
+      llaneEl.addEventListener('pointercancel', endLyrDrag);
+
+      llaneEl.addEventListener('dblclick', (e: MouseEvent) => {
+        const target = e.target as HTMLElement;
+        const blockEl = target.closest('.lyr-block') as HTMLElement | null;
+        if (!blockEl) return;
+        const lid = +(blockEl.dataset.lid || 0);
+        const ly = S.lyr.find(l => l.id === lid);
+        if (ly) {
+          showLyrInlineEditor(ly, blockEl);
+        }
+      });
+    }
+
+    // Lyric toolbar buttons
+    safeClick('#btnTbAddLyr', addLyricAtPlayhead);
+    safeClick('#btnTbSplitLyr', splitLyricAtPlayhead);
+    safeClick('#btnTbMergeNext', mergeLyricWithNext);
+    safeClick('#btnTbDelLyr', deleteLyricLine);
+    safeClick('#btnTbDeselect', () => selectLyrBlock(null));
+    safeChange('#lyrTbStart', (e: any) => {
+      const ly = selLyr();
+      if (ly) {
+        ly.t = Math.max(0, parseFloat(e.target.value) || 0);
+        syncLyrToEditor(true);
+      }
+    });
+    safeChange('#lyrTbEnd', (e: any) => {
+      const ly = selLyr();
+      if (ly) {
+        ly.endT = Math.max(ly.t + 0.1, parseFloat(e.target.value) || (ly.t + 1));
+        syncLyrToEditor(true);
+      }
+    });
 
     // chỉnh clip
     const num = (id: string, fn: (c: Clip, v: number) => void) => {
@@ -3450,9 +4696,13 @@ export function initStudio() {
   loadSample();
   setSize();
   setVolume(A.vol);
+  const tlFadeIn = $('#tlFadeIn') as HTMLSelectElement | null;
+  if (tlFadeIn) tlFadeIn.value = String(A.fadeIn);
+  const tlFadeOut = $('#tlFadeOut') as HTMLSelectElement | null;
+  if (tlFadeOut) tlFadeOut.value = String(A.fadeOut);
+  updateUndoRedoUI();
   renderWaveformEditor();
-  renderLyricWaveform();
-  updateLyricEditorUI();
+  renderLyricUI();
   renderTimeline();
   draw();
   updateAudioStatus();
@@ -3461,6 +4711,7 @@ export function initStudio() {
   // Cleanup for unmount
   return () => {
     halt();
+    stopTransitionPreview();
     if (A.isPreviewing) stopPreview();
     if (A.isTrimPreviewing) stopTrimPreview();
     if (S.viz.logoUrl) URL.revokeObjectURL(S.viz.logoUrl);
