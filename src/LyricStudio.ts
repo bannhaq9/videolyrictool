@@ -34,46 +34,74 @@ export function initStudio() {
     {
       group: 'Cơ bản',
       items: [
-        { key: 'none', label: 'Cắt thẳng' },
-        { key: 'fade', label: 'Mờ dần' },
-        { key: 'slide', label: 'Trượt' },
-        { key: 'push', label: 'Trượt đẩy' },
-        { key: 'zoom', label: 'Phóng to' },
-        { key: 'zoomout', label: 'Zoom ra' }
+        { key: 'none', label: 'Cắt thẳng', icon: '✂️' },
+        { key: 'fade', label: 'Mờ dần (cross-fade)', icon: '◐' },
+        { key: 'fadeblack', label: 'Qua đen', icon: '🌑' },
+        { key: 'fadewhite', label: 'Qua trắng', icon: '🌕' }
+      ]
+    },
+    {
+      group: 'Trượt',
+      items: [
+        { key: 'slideleft', label: 'Trượt trái', icon: '⬅️' },
+        { key: 'slideright', label: 'Trượt phải', icon: '➡️' },
+        { key: 'slideup', label: 'Trượt lên', icon: '⬆️' },
+        { key: 'slidedown', label: 'Trượt xuống', icon: '⬇️' },
+        { key: 'push', label: 'Đẩy (push)', icon: '⏩' }
       ]
     },
     {
       group: 'Quét',
       items: [
-        { key: 'wiper', label: 'Quét sang phải' },
-        { key: 'wipel', label: 'Quét sang trái' },
-        { key: 'wipeu', label: 'Quét lên' },
-        { key: 'wiped', label: 'Quét xuống' },
-        { key: 'circleopen', label: 'Mở vòng tròn' },
-        { key: 'circleclose', label: 'Thu vòng tròn' }
+        { key: 'wiper', label: 'Quét ngang', icon: '↔️' },
+        { key: 'wiped', label: 'Quét dọc', icon: '↕️' },
+        { key: 'circleopen', label: 'Mở vòng tròn', icon: '🔘' },
+        { key: 'centeropen', label: 'Mở từ giữa ra', icon: '🚪' }
       ]
     },
     {
-      group: 'Hiệu ứng mạnh',
+      group: 'Phóng',
       items: [
-        { key: 'spin', label: 'Xoay nhẹ và mờ' },
-        { key: 'flip', label: 'Lật trang' },
-        { key: 'flash', label: 'Chớp trắng' },
-        { key: 'blur', label: 'Nhòe rồi rõ' },
-        { key: 'glitch', label: 'Nhiễu RGB' },
-        { key: 'mosaic', label: 'Hạt nhỏ (mosaic)' },
-        { key: 'random', label: 'Ngẫu nhiên' }
+        { key: 'zoom', label: 'Zoom vào', icon: '🔍' },
+        { key: 'zoomout', label: 'Zoom ra', icon: '🔎' },
+        { key: 'spin', label: 'Xoay nhẹ', icon: '🌀' }
+      ]
+    },
+    {
+      group: 'Phong cách',
+      items: [
+        { key: 'blur', label: 'Nhòe (blur)', icon: '🌫️' },
+        { key: 'flash', label: 'Flash sáng', icon: '⚡' },
+        { key: 'glitch', label: 'Glitch RGB', icon: '👾' },
+        { key: 'flip', label: 'Lật 3D', icon: '🃏' }
+      ]
+    },
+    {
+      group: 'Lựa chọn',
+      items: [
+        { key: 'random', label: 'Ngẫu nhiên', icon: '🎲' }
       ]
     }
   ];
   const TR: Record<string, string> = {};
-  TR_GROUPS.forEach(g => g.items.forEach(it => { TR[it.key] = it.label; }));
+  const TR_ICONS: Record<string, string> = {};
+  TR_GROUPS.forEach(g => g.items.forEach(it => {
+    TR[it.key] = it.label;
+    TR_ICONS[it.key] = it.icon;
+  }));
   const CONCRETE_TR = [
-    'fade', 'slide', 'push', 'zoom', 'zoomout',
-    'wiper', 'wipel', 'wipeu', 'wiped', 'circleopen', 'circleclose',
-    'spin', 'flip', 'flash', 'blur', 'glitch', 'mosaic'
+    'fade', 'fadeblack', 'fadewhite',
+    'slideleft', 'slideright', 'slideup', 'slidedown', 'push',
+    'wiper', 'wiped', 'circleopen', 'centeropen',
+    'zoom', 'zoomout', 'spin',
+    'blur', 'flash', 'glitch', 'flip'
   ];
   function getEffectiveTr(trName: string, clipId: number, index: number): string {
+    if (trName === 'slide') return 'slideleft';
+    if (trName === 'wipel') return 'wiper';
+    if (trName === 'wipeu') return 'wiped';
+    if (trName === 'circleclose') return 'circleopen';
+    if (trName === 'mosaic') return 'glitch';
     if (trName !== 'random') return trName;
     const idx = Math.abs((clipId * 9301 + 49297 + index * 233) % CONCRETE_TR.length);
     return CONCRETE_TR[idx];
@@ -547,46 +575,122 @@ export function initStudio() {
     const p = clamp(local / trd, 0, 1);
     const k = ease(p);
     const effTr = getEffectiveTr(trType, c.id || 1, clipIndex);
+    const prevTime = prev.dur + local;
 
     if (effTr === 'none') {
       drawMedia(c, local, {}, ctx);
       return;
     }
     if (effTr === 'fade') {
-      drawMedia(prev, prev.dur, {}, ctx);
+      drawMedia(prev, prevTime, {}, ctx);
       drawMedia(c, local, { alpha: k }, ctx);
       return;
     }
-    if (effTr === 'slide') {
-      drawMedia(prev, prev.dur, { dx: -W * k }, ctx);
-      drawMedia(c, local, { dx: W * (1 - k) }, ctx);
+    if (effTr === 'fadeblack') {
+      if (k < 0.5) {
+        const a = 1 - k * 2;
+        drawMedia(prev, prevTime, { alpha: a }, ctx);
+      } else {
+        const a = (k - 0.5) * 2;
+        drawMedia(c, local, { alpha: a }, ctx);
+      }
       return;
     }
-    if (effTr === 'push') {
-      drawMedia(prev, prev.dur, { dx: -W * k }, ctx);
+    if (effTr === 'fadewhite') {
+      if (k < 0.5) {
+        drawMedia(prev, prevTime, {}, ctx);
+        ctx.fillStyle = 'rgba(255,255,255,' + (k * 2) + ')';
+        ctx.fillRect(0, 0, W, H);
+      } else {
+        drawMedia(c, local, {}, ctx);
+        ctx.fillStyle = 'rgba(255,255,255,' + ((1 - k) * 2) + ')';
+        ctx.fillRect(0, 0, W, H);
+      }
+      return;
+    }
+    if (effTr === 'slideleft') {
+      drawMedia(prev, prevTime, { dx: -W * 0.15 * k }, ctx);
       drawMedia(c, local, { dx: W * (1 - k) }, ctx);
       const seamX = W * (1 - k);
       ctx.save();
-      const shadowG = ctx.createLinearGradient(seamX - 18, 0, seamX, 0);
+      const shadowG = ctx.createLinearGradient(seamX - 22, 0, seamX, 0);
       shadowG.addColorStop(0, 'rgba(0,0,0,0)');
       shadowG.addColorStop(1, 'rgba(0,0,0,0.45)');
       ctx.fillStyle = shadowG;
-      ctx.fillRect(seamX - 18, 0, 18, H);
+      ctx.fillRect(seamX - 22, 0, 22, H);
+      ctx.restore();
+      return;
+    }
+    if (effTr === 'slideright') {
+      drawMedia(prev, prevTime, { dx: W * 0.15 * k }, ctx);
+      drawMedia(c, local, { dx: -W * (1 - k) }, ctx);
+      const seamX = W * k;
+      ctx.save();
+      const shadowG = ctx.createLinearGradient(seamX, 0, seamX + 22, 0);
+      shadowG.addColorStop(0, 'rgba(0,0,0,0.45)');
+      shadowG.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = shadowG;
+      ctx.fillRect(seamX, 0, 22, H);
+      ctx.restore();
+      return;
+    }
+    if (effTr === 'slideup') {
+      drawMedia(prev, prevTime, {}, ctx);
+      ctx.save();
+      ctx.translate(0, H * (1 - k));
+      drawMedia(c, local, {}, ctx);
+      ctx.restore();
+      const seamY = H * (1 - k);
+      ctx.save();
+      const shadowG = ctx.createLinearGradient(0, seamY - 22, 0, seamY);
+      shadowG.addColorStop(0, 'rgba(0,0,0,0)');
+      shadowG.addColorStop(1, 'rgba(0,0,0,0.45)');
+      ctx.fillStyle = shadowG;
+      ctx.fillRect(0, seamY - 22, W, 22);
+      ctx.restore();
+      return;
+    }
+    if (effTr === 'slidedown') {
+      drawMedia(prev, prevTime, {}, ctx);
+      ctx.save();
+      ctx.translate(0, -H * (1 - k));
+      drawMedia(c, local, {}, ctx);
+      ctx.restore();
+      const seamY = H * k;
+      ctx.save();
+      const shadowG = ctx.createLinearGradient(0, seamY, 0, seamY + 22);
+      shadowG.addColorStop(0, 'rgba(0,0,0,0.45)');
+      shadowG.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = shadowG;
+      ctx.fillRect(0, seamY, W, 22);
+      ctx.restore();
+      return;
+    }
+    if (effTr === 'push') {
+      drawMedia(prev, prevTime, { dx: -W * k }, ctx);
+      drawMedia(c, local, { dx: W * (1 - k) }, ctx);
+      const seamX = W * (1 - k);
+      ctx.save();
+      const shadowG = ctx.createLinearGradient(seamX - 20, 0, seamX, 0);
+      shadowG.addColorStop(0, 'rgba(0,0,0,0)');
+      shadowG.addColorStop(1, 'rgba(0,0,0,0.5)');
+      ctx.fillStyle = shadowG;
+      ctx.fillRect(seamX - 20, 0, 20, H);
       ctx.restore();
       return;
     }
     if (effTr === 'zoom') {
-      drawMedia(prev, prev.dur, {}, ctx);
-      drawMedia(c, local, { alpha: k, zoom: 1.35 - 0.35 * k }, ctx);
+      drawMedia(prev, prevTime, { alpha: 1 - k * 0.35 }, ctx);
+      drawMedia(c, local, { alpha: k, zoom: 0.65 + 0.35 * k }, ctx);
       return;
     }
     if (effTr === 'zoomout') {
-      drawMedia(prev, prev.dur, { zoom: 1 - 0.25 * k, alpha: 1 - k }, ctx);
+      drawMedia(prev, prevTime, { zoom: 1 - 0.25 * k, alpha: 1 - k }, ctx);
       drawMedia(c, local, { zoom: 1.35 - 0.35 * k, alpha: k }, ctx);
       return;
     }
     if (effTr === 'wiper') {
-      drawMedia(prev, prev.dur, {}, ctx);
+      drawMedia(prev, prevTime, {}, ctx);
       bctx2.clearRect(0, 0, W, H);
       drawMedia(c, local, {}, bctx2);
       const f = Math.max(30, W * 0.06);
@@ -604,46 +708,8 @@ export function initStudio() {
       ctx.drawImage(buf2, 0, 0);
       return;
     }
-    if (effTr === 'wipel') {
-      drawMedia(prev, prev.dur, {}, ctx);
-      bctx2.clearRect(0, 0, W, H);
-      drawMedia(c, local, {}, bctx2);
-      const f = Math.max(30, W * 0.06);
-      const sx = (W + f) - (W + f * 2) * k;
-      bctx2.save();
-      bctx2.globalCompositeOperation = 'destination-in';
-      const g = bctx2.createLinearGradient(sx - f, 0, sx + f, 0);
-      g.addColorStop(0, 'rgba(0,0,0,0)');
-      g.addColorStop(1, 'rgba(0,0,0,1)');
-      bctx2.fillStyle = '#000';
-      if (sx + f < W) bctx2.fillRect(sx + f, 0, W - (sx + f), H);
-      bctx2.fillStyle = g;
-      bctx2.fillRect(Math.max(0, sx - f), 0, f * 2, H);
-      bctx2.restore();
-      ctx.drawImage(buf2, 0, 0);
-      return;
-    }
-    if (effTr === 'wipeu') {
-      drawMedia(prev, prev.dur, {}, ctx);
-      bctx2.clearRect(0, 0, W, H);
-      drawMedia(c, local, {}, bctx2);
-      const f = Math.max(30, H * 0.06);
-      const sy = (H + f) - (H + f * 2) * k;
-      bctx2.save();
-      bctx2.globalCompositeOperation = 'destination-in';
-      const g = bctx2.createLinearGradient(0, sy - f, 0, sy + f);
-      g.addColorStop(0, 'rgba(0,0,0,0)');
-      g.addColorStop(1, 'rgba(0,0,0,1)');
-      bctx2.fillStyle = '#000';
-      if (sy + f < H) bctx2.fillRect(0, sy + f, W, H - (sy + f));
-      bctx2.fillStyle = g;
-      bctx2.fillRect(0, Math.max(0, sy - f), W, f * 2);
-      bctx2.restore();
-      ctx.drawImage(buf2, 0, 0);
-      return;
-    }
     if (effTr === 'wiped') {
-      drawMedia(prev, prev.dur, {}, ctx);
+      drawMedia(prev, prevTime, {}, ctx);
       bctx2.clearRect(0, 0, W, H);
       drawMedia(c, local, {}, bctx2);
       const f = Math.max(30, H * 0.06);
@@ -662,7 +728,7 @@ export function initStudio() {
       return;
     }
     if (effTr === 'circleopen') {
-      drawMedia(prev, prev.dur, {}, ctx);
+      drawMedia(prev, prevTime, {}, ctx);
       bctx2.clearRect(0, 0, W, H);
       drawMedia(c, local, {}, bctx2);
       const maxR = Math.hypot(W / 2, H / 2) * 1.05;
@@ -687,37 +753,30 @@ export function initStudio() {
       ctx.drawImage(buf2, 0, 0);
       return;
     }
-    if (effTr === 'circleclose') {
-      drawMedia(c, local, {}, ctx);
-      bctx1.clearRect(0, 0, W, H);
-      drawMedia(prev, prev.dur, {}, bctx1);
-      const maxR = Math.hypot(W / 2, H / 2) * 1.05;
-      const r = maxR * (1 - k);
-      const f = 25;
-      if (r > 0) {
-        bctx1.save();
-        bctx1.globalCompositeOperation = 'destination-in';
-        if (r - f > 0) {
-          bctx1.fillStyle = '#000';
-          bctx1.beginPath();
-          bctx1.arc(W / 2, H / 2, r - f, 0, Math.PI * 2);
-          bctx1.fill();
-        }
-        const g = bctx1.createRadialGradient(W / 2, H / 2, Math.max(0, r - f), W / 2, H / 2, r + f);
-        g.addColorStop(0, 'rgba(0,0,0,1)');
-        g.addColorStop(1, 'rgba(0,0,0,0)');
-        bctx1.fillStyle = g;
-        bctx1.beginPath();
-        bctx1.arc(W / 2, H / 2, r + f, 0, Math.PI * 2);
-        bctx1.fill();
-        bctx1.restore();
-        ctx.drawImage(buf1, 0, 0);
-      }
+    if (effTr === 'centeropen') {
+      drawMedia(prev, prevTime, {}, ctx);
+      bctx2.clearRect(0, 0, W, H);
+      drawMedia(c, local, {}, bctx2);
+      const halfW = (W / 2) * k;
+      bctx2.save();
+      bctx2.globalCompositeOperation = 'destination-in';
+      bctx2.fillStyle = '#000';
+      bctx2.fillRect(W / 2 - halfW, 0, halfW * 2, H);
+      bctx2.restore();
+      ctx.drawImage(buf2, 0, 0);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,' + (0.35 * (1 - k)) + ')';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(W / 2 - halfW, 0); ctx.lineTo(W / 2 - halfW, H);
+      ctx.moveTo(W / 2 + halfW, 0); ctx.lineTo(W / 2 + halfW, H);
+      ctx.stroke();
+      ctx.restore();
       return;
     }
     if (effTr === 'spin') {
       bctx1.clearRect(0, 0, W, H);
-      drawMedia(prev, prev.dur, {}, bctx1);
+      drawMedia(prev, prevTime, {}, bctx1);
       bctx2.clearRect(0, 0, W, H);
       drawMedia(c, local, {}, bctx2);
       ctx.save();
@@ -741,7 +800,7 @@ export function initStudio() {
     }
     if (effTr === 'flip') {
       bctx1.clearRect(0, 0, W, H);
-      drawMedia(prev, prev.dur, {}, bctx1);
+      drawMedia(prev, prevTime, {}, bctx1);
       bctx2.clearRect(0, 0, W, H);
       drawMedia(c, local, {}, bctx2);
       ctx.save();
@@ -766,7 +825,7 @@ export function initStudio() {
       return;
     }
     if (effTr === 'flash') {
-      if (k < 0.5) drawMedia(prev, prev.dur, {}, ctx);
+      if (k < 0.5) drawMedia(prev, prevTime, {}, ctx);
       else drawMedia(c, local, {}, ctx);
       const flashA = Math.sin(k * Math.PI);
       ctx.save();
@@ -782,7 +841,7 @@ export function initStudio() {
         ctx.save();
         ctx.filter = 'blur(' + blurPx.toFixed(1) + 'px)';
         if (k < 0.5) {
-          drawMedia(prev, prev.dur, {}, ctx);
+          drawMedia(prev, prevTime, {}, ctx);
         } else {
           drawMedia(c, local, {}, ctx);
         }
@@ -790,7 +849,7 @@ export function initStudio() {
       } else {
         if (k < 0.5) {
           const s = 1 - 0.22 * (k * 2);
-          drawMedia(prev, prev.dur, { zoom: s, alpha: 1 - k }, ctx);
+          drawMedia(prev, prevTime, { zoom: s, alpha: 1 - k }, ctx);
         } else {
           const s = 0.78 + 0.22 * ((k - 0.5) * 2);
           drawMedia(c, local, { zoom: s, alpha: k }, ctx);
@@ -800,7 +859,7 @@ export function initStudio() {
     }
     if (effTr === 'glitch') {
       bctx1.clearRect(0, 0, W, H);
-      drawMedia(prev, prev.dur, {}, bctx1);
+      drawMedia(prev, prevTime, {}, bctx1);
       bctx2.clearRect(0, 0, W, H);
       drawMedia(c, local, {}, bctx2);
 
@@ -841,34 +900,9 @@ export function initStudio() {
       }
       return;
     }
-    if (effTr === 'mosaic') {
-      drawMedia(prev, prev.dur, {}, ctx);
-      bctx2.clearRect(0, 0, W, H);
-      drawMedia(c, local, {}, bctx2);
-
-      const cols = 20;
-      const rows = Math.round(cols * (H / W));
-      const bw = W / cols;
-      const bh = H / rows;
-
-      for (let r = 0; r < rows; r++) {
-        for (let cl = 0; cl < cols; cl++) {
-          const seed = Math.abs(Math.sin((r * 41 + cl * 89 + (r ^ cl) * 13) * 12.9898) * 1000) % 1;
-          if (k >= seed) {
-            const cellAlpha = Math.min(1, (k - seed) / 0.15 + 0.1);
-            ctx.save();
-            ctx.globalAlpha = cellAlpha;
-            const sx = cl * bw, sy = r * bh;
-            ctx.drawImage(buf2, sx, sy, bw + 0.5, bh + 0.5, sx, sy, bw + 0.5, bh + 0.5);
-            ctx.restore();
-          }
-        }
-      }
-      return;
-    }
 
     // Default fallback
-    drawMedia(prev, prev.dur, {}, ctx);
+    drawMedia(prev, prevTime, {}, ctx);
     drawMedia(c, local, { alpha: k }, ctx);
   }
 
@@ -951,7 +985,8 @@ export function initStudio() {
     const L = locate(t);
     if (L) {
       const c = S.clips[L.i], prev = S.clips[L.i - 1];
-      const trd = prev ? Math.min(c.trDur, prev.dur, c.dur) : 0;
+      const maxTrd = prev ? Math.max(0.1, Math.min(3.0, prev.dur * 0.5, c.dur * 0.5)) : 0;
+      const trd = prev ? Math.min(c.trDur, maxTrd) : 0;
       if (prev && c.tr !== 'none' && L.local < trd && trd > 0) {
         renderTransition(c.tr, prev, c, L.local, trd, L.i);
       } else {
@@ -2877,9 +2912,10 @@ export function initStudio() {
     if (L) {
       const c = S.clips[L.i], prev = S.clips[L.i - 1];
       if (c.type === 'video') { act.add(c); setVid(c, c.srcIn + L.local, playing); }
-      if (prev && prev.type === 'video' && c.tr !== 'none' && L.local < Math.min(c.trDur, prev.dur, c.dur)) {
+      if (prev && prev.type === 'video' && c.tr !== 'none' && L.local < Math.min(c.trDur, prev.dur * 0.5, c.dur * 0.5)) {
         act.add(prev);
-        setVid(prev, Math.max(prev.srcIn, prev.srcOut - 0.05), false);
+        const wantedPrevTime = Math.min(prev.full, prev.srcIn + prev.dur + L.local);
+        setVid(prev, Math.max(prev.srcIn, wantedPrevTime <= prev.full ? wantedPrevTime : prev.srcOut - 0.05), false);
       }
     }
     S.clips.forEach(c => {
@@ -3064,12 +3100,36 @@ export function initStudio() {
     if (rulerEl) rulerEl.innerHTML = r;
     let a = 0, h = '';
     S.clips.forEach((c, i) => {
-      const w = Math.max(8, c.dur * pps - 2);
-      const trw = i > 0 && c.tr !== 'none' ? Math.min(c.trDur, c.dur, S.clips[i - 1].dur) * pps : 0;
+      const isSel = c.id === S.sel;
+      const w = Math.max(16, c.dur * pps - 2);
+      const prev = i > 0 ? S.clips[i - 1] : null;
+      const maxTrd = prev ? Math.max(0.1, Math.min(3.0, prev.dur * 0.5, c.dur * 0.5)) : 0;
+      const trd = prev ? Math.min(c.trDur || 1.0, maxTrd) : 0;
+      const trw = i > 0 && c.tr !== 'none' ? trd * pps : 0;
       const trName = TR[c.tr] || c.tr;
-      h += '<div class="clip' + (c.id === S.sel ? ' sel' : '') + '" data-id="' + c.id + '" style="left:' + (a * pps) + 'px;width:' + w + 'px;background-image:url(' + c.thumb + ')">'
-        + (trw ? '<i class="trz" style="width:' + Math.min(trw, w) + 'px" title="Chuyển cảnh: ' + esc(trName) + ' (' + c.trDur.toFixed(1) + 's)"></i>' : '')
-        + '<span class="cn">' + esc(c.name) + '</span><span class="cd">' + c.dur.toFixed(1) + 's</span><span class="kind">' + (c.type === 'video' ? 'video' : 'ảnh') + '</span></div>';
+      const trIcon = TR_ICONS[c.tr] || '✨';
+      const leftPx = a * pps;
+      const typeLabel = c.type === 'video' ? 'video' : 'ảnh';
+      const typeIcon = c.type === 'video' ? '🎬' : '🖼️';
+
+      h += '<div class="clip' + (isSel ? ' sel' : '') + '" data-id="' + c.id + '" data-idx="' + i + '" style="left:' + leftPx + 'px;width:' + w + 'px;" title="' + esc(c.name) + ' (' + c.dur.toFixed(1) + 's)">'
+        + (isSel ? '<div class="clip-handle left" data-cid="' + c.id + '" title="Kéo để chỉnh đầu clip">◀</div>' : '')
+        + '<div class="clip-filmstrip" style="background-image:url(' + c.thumb + ')"></div>'
+        + '<div class="clip-overlay"></div>'
+        + (trw ? '<i class="trz" style="width:' + Math.min(trw, w) + 'px" title="Chuyển cảnh: ' + esc(trName) + ' (' + trd.toFixed(1) + 's)"><span class="trz-badge">' + trIcon + ' ' + esc(trName) + '</span></i>' : '')
+        + '<div class="clip-header"><span class="cn">' + typeIcon + ' ' + esc(c.name) + '</span></div>'
+        + '<div class="clip-footer"><span class="cd">' + c.dur.toFixed(1) + 's</span><span class="kind">' + typeLabel + '</span></div>'
+        + (isSel ? '<div class="clip-handle right" data-cid="' + c.id + '" title="Kéo để chỉnh đuôi clip">▶</div>' : '')
+        + '</div>';
+
+      if (i > 0) {
+        const hasTr = c.tr !== 'none';
+        h += '<div class="trz-seam-btn' + (hasTr ? ' active' : '') + '" data-clip-idx="' + i + '" style="left:' + leftPx + 'px;" title="Chuyển cảnh giữa 2 clip: ' + esc(trName) + (hasTr ? ' (' + trd.toFixed(1) + 's)' : '') + '">'
+          + '<span class="trz-diamond">' + (hasTr ? trIcon : '⟡') + '</span>'
+          + (hasTr ? '<span class="trz-dur-tag">' + trd.toFixed(1) + 's</span>' : '')
+          + '</div>';
+      }
+
       a += c.dur;
     });
     const clipsEl = $('#clips');
@@ -3223,6 +3283,8 @@ export function initStudio() {
     ids.forEach(i => { const el = $('#' + i); if (el) el.disabled = !c; });
     const btnPrevClipTr = $('#btnPreviewClipTr');
     if (btnPrevClipTr) btnPrevClipTr.disabled = !c;
+    const btnApplyClipTrAll = $('#btnApplyClipTrAll');
+    if (btnApplyClipTrAll) btnApplyClipTrAll.disabled = !c;
 
     if (ab) {
       $('#iName').textContent = 'Đoạn nhạc: ' + (A.name || 'Nhạc') + ' [' + fmt(ab.dur) + '] (' + fmt(ab.srcIn) + ' ➔ ' + fmt(ab.srcOut) + ')';
@@ -3240,8 +3302,27 @@ export function initStudio() {
     $('#iOut').max = c.full;
     $('#iFit').value = c.fit;
     $('#iFx').value = c.fx;
-    $('#iTr').value = c.tr;
-    $('#iTrD').value = c.trDur;
+
+    const cIdx = S.clips.findIndex(x => x.id === c.id);
+    if (cIdx <= 0) {
+      if ($('#iTr')) { $('#iTr').value = 'none'; $('#iTr').disabled = true; $('#iTr').title = 'Clip đầu tiên không có chuyển cảnh vào'; }
+      if ($('#iTrD')) { $('#iTrD').disabled = true; }
+      if (btnPrevClipTr) btnPrevClipTr.disabled = true;
+      if (btnApplyClipTrAll) btnApplyClipTrAll.disabled = true;
+    } else {
+      const prev = S.clips[cIdx - 1];
+      const maxTrD = Math.max(0.1, Math.min(3.0, prev.dur * 0.5, c.dur * 0.5));
+      c.trDur = Math.min(c.trDur || 1.0, maxTrD);
+      if ($('#iTr')) { $('#iTr').disabled = false; $('#iTr').value = c.tr; $('#iTr').title = ''; }
+      if ($('#iTrD')) {
+        $('#iTrD').disabled = false;
+        $('#iTrD').max = maxTrD.toFixed(1);
+        $('#iTrD').value = c.trDur.toFixed(1);
+      }
+      if (btnPrevClipTr) btnPrevClipTr.disabled = false;
+      if (btnApplyClipTrAll) btnApplyClipTrAll.disabled = false;
+    }
+
     $('#iCol').value = c.color;
   }
   function refreshAll() {
@@ -3278,34 +3359,88 @@ export function initStudio() {
     if (c.type === 'video') n.el = makeVideo(c.url);
     return n;
   }
-  function splitAtHead() {
-    const L = locate(S.t);
-    if (!L) return toast('Chưa có clip để cắt.');
-    const c = S.clips[L.i], local = L.local;
-    if (local < 0.2 || c.dur - local < 0.2) return toast('Đưa đầu phát vào giữa clip (cách mép ít nhất 0,2 giây) rồi cắt.');
-    pushTimelineHistory();
-    const n = cloneClip(c);
-    n.tr = 'none';
-    if (c.type === 'image') {
-      n.dur = c.dur - local;
-      c.dur = local;
-    } else {
-      const out = c.srcOut;
-      c.srcOut = c.srcIn + local;
-      c.dur = local;
-      n.srcIn = c.srcOut;
-      n.srcOut = out;
-      n.dur = out - n.srcIn;
-    }
-    n.sample = c.sample;
-    S.clips.splice(L.i + 1, 0, n);
-    S.sel = n.id;
-    refreshAll();
-    toast('Đã cắt thành hai clip.');
-  }
+  function splitClipAtPlayhead() {
+    let targetIdx = -1;
+    let clipStartSec = 0;
 
-  function splitAtPlayhead() {
-    // 1. Tách đoạn nhạc nếu đầu phát nằm trong đoạn nhạc
+    // 1. Nếu đang chọn clip, kiểm tra xem playhead có nằm trong clip đó không
+    if (S.sel != null) {
+      let accum = 0;
+      for (let i = 0; i < S.clips.length; i++) {
+        const c = S.clips[i];
+        if (c.id === S.sel) {
+          if (S.t >= accum - 0.001 && S.t <= accum + c.dur + 0.001) {
+            targetIdx = i;
+            clipStartSec = accum;
+          }
+          break;
+        }
+        accum += c.dur;
+      }
+    }
+
+    // 2. Nếu clip đang chọn không chứa playhead hoặc chưa chọn clip nào, tìm clip ngay dưới playhead
+    if (targetIdx < 0) {
+      let accum = 0;
+      for (let i = 0; i < S.clips.length; i++) {
+        const c = S.clips[i];
+        if (S.t >= accum && S.t <= accum + c.dur) {
+          targetIdx = i;
+          clipStartSec = accum;
+          break;
+        }
+        accum += c.dur;
+      }
+    }
+
+    // 3. Nếu tìm thấy clip dưới playhead
+    if (targetIdx >= 0) {
+      const c = S.clips[targetIdx];
+      const local = S.t - clipStartSec;
+
+      // Không cho cắt nếu playhead cách mép clip dưới 0.3s
+      if (local < 0.3 || (c.dur - local) < 0.3) {
+        return toast('Đầu phát phải cách mép clip ít nhất 0.3 giây để cắt.');
+      }
+
+      pushTimelineHistory();
+      const c2 = cloneClip(c);
+      c2.tr = 'none';
+      c2.fit = c.fit;
+      c2.fx = c.fx;
+      c2.color = c.color;
+      c2.sample = c.sample;
+      c2.name = c.name + ' (phần 2)';
+
+      if (c.type === 'image') {
+        const oldDur = c.dur;
+        c.dur = parseFloat(local.toFixed(2));
+        c2.dur = parseFloat((oldDur - local).toFixed(2));
+      } else {
+        const oldSrcOut = c.srcOut;
+        c.srcOut = parseFloat((c.srcIn + local).toFixed(2));
+        c.dur = parseFloat((c.srcOut - c.srcIn).toFixed(2));
+        c2.srcIn = c.srcOut;
+        c2.srcOut = oldSrcOut;
+        c2.dur = parseFloat((oldSrcOut - c2.srcIn).toFixed(2));
+      }
+
+      c.trDur = Math.max(0.1, Math.min(c.trDur || 1.0, c.dur * 0.5));
+      c2.tr = 'none';
+      c2.trDur = Math.max(0.1, Math.min(1.0, c2.dur * 0.5));
+
+      S.clips.splice(targetIdx + 1, 0, c2);
+      S.sel = c2.id;
+      S.selAudioId = null;
+      S.selLyrId = null;
+
+      if (S.syncWithMusic) applyMusicSync();
+      refreshAll();
+      toast(`Đã cắt clip "${c.name}" thành 2 clip tại ${fmt(S.t)}.`);
+      return;
+    }
+
+    // 4. Nếu playhead nằm trong một đoạn nhạc
     const bIdx = S.audioBlocks.findIndex(b => S.t > b.start + 0.1 && S.t < b.start + b.dur - 0.1);
     if (bIdx >= 0) {
       pushTimelineHistory();
@@ -3335,17 +3470,36 @@ export function initStudio() {
       return;
     }
 
-    // 2. Tách clip nếu đầu phát nằm trong clip
-    const L = locate(S.t);
-    if (L && L.local >= 0.2 && S.clips[L.i].dur - L.local >= 0.2) {
-      splitAtHead();
-      autoFitImagesToMusic();
-      return;
-    }
-    toast('Đưa đầu phát vào giữa đoạn nhạc hoặc clip để cắt.');
+    toast('Đưa đầu phát vào giữa clip hoặc đoạn nhạc để cắt (Phím S).');
   }
 
+  const splitAtPlayhead = splitClipAtPlayhead;
+  const splitAtHead = splitClipAtPlayhead;
+
   function deleteSelected() {
+    if (S.sel != null) {
+      const i = S.clips.findIndex(c => c.id === S.sel);
+      if (i >= 0) {
+        if (S.clips.length <= 1) {
+          return toast('Cần giữ lại ít nhất 1 clip trong dự án.');
+        }
+        pushTimelineHistory();
+        const removed = S.clips.splice(i, 1)[0];
+        if (S.clips.length > 0) {
+          S.clips[0].tr = 'none';
+          for (let j = 1; j < S.clips.length; j++) {
+            const p = S.clips[j - 1], cur = S.clips[j];
+            const maxD = Math.max(0.1, Math.min(3.0, p.dur * 0.5, cur.dur * 0.5));
+            cur.trDur = Math.min(cur.trDur || 1.0, maxD);
+          }
+        }
+        S.sel = S.clips[Math.min(i, S.clips.length - 1)]?.id ?? null;
+        if (S.syncWithMusic) applyMusicSync();
+        refreshAll();
+        toast('Đã xóa clip: ' + removed.name);
+        return;
+      }
+    }
     if (S.selAudioId != null) {
       const idx = S.audioBlocks.findIndex(b => b.id === S.selAudioId);
       if (idx >= 0) {
@@ -3358,35 +3512,27 @@ export function initStudio() {
         return;
       }
     }
-    if (S.sel != null) {
-      const i = S.clips.findIndex(c => c.id === S.sel);
-      if (i >= 0) {
-        pushTimelineHistory();
-        S.clips.splice(i, 1);
-        S.sel = S.clips[Math.min(i, S.clips.length - 1)]?.id ?? null;
-        autoFitImagesToMusic();
-        refreshAll();
-        toast('Đã xóa clip');
-        return;
-      }
-    }
     if (S.selLyrId != null) {
       deleteLyricLine();
     }
   }
 
   function closeAudioGaps() {
-    if (!S.audioBlocks.length) return toast('Không có đoạn nhạc nào trên timeline.');
     pushTimelineHistory();
-    S.audioBlocks.sort((a, b) => a.start - b.start);
-    let cur = 0;
-    S.audioBlocks.forEach(b => {
-      b.start = cur;
-      cur += b.dur;
+    if (S.audioBlocks.length > 0) {
+      S.audioBlocks.sort((a, b) => a.start - b.start);
+      let cur = 0;
+      S.audioBlocks.forEach(b => {
+        b.start = cur;
+        cur += b.dur;
+      });
+    }
+    S.clips.forEach(c => {
+      if (c.dur < 0.5) c.dur = 0.5;
     });
-    autoFitImagesToMusic();
+    if (S.syncWithMusic) applyMusicSync();
     refreshAll();
-    toast('Đã nối liền các đoạn nhạc, xóa sạch khoảng trống.');
+    toast('Đã nối liền các đoạn nhạc và clip, xóa sạch khoảng trống.');
   }
 
   function applyAudioPreset(span: number | null) {
@@ -3727,16 +3873,40 @@ export function initStudio() {
     });
     safeClick('#btnPreviewClipTr', () => {
       const c = selClip();
-      const tr = ($('#iTr') as HTMLSelectElement)?.value || c?.tr || S.def.tr;
-      const dur = clamp(+($('#iTrD') as HTMLInputElement)?.value || c?.trDur || S.def.trDur || 0.6, 0.1, 3);
-      previewTransition(tr, dur);
+      if (!c) return;
+      const cIdx = S.clips.findIndex(x => x.id === c.id);
+      if (cIdx <= 0) {
+        previewTransition(c.tr || S.def.tr, c.trDur || S.def.trDur);
+      } else {
+        previewSeamTransition(cIdx);
+      }
+    });
+    safeClick('#btnApplyClipTrAll', () => {
+      const c = selClip();
+      if (!c) return;
+      const cIdx = S.clips.findIndex(x => x.id === c.id);
+      if (cIdx <= 0) return toast('Chọn một clip từ thứ hai trở đi để áp dụng chuyển cảnh.');
+      pushTimelineHistory();
+      const tr = c.tr;
+      const trd = c.trDur;
+      for (let j = 1; j < S.clips.length; j++) {
+        const cur = S.clips[j], prev = S.clips[j - 1];
+        cur.tr = tr;
+        const maxD = Math.max(0.1, Math.min(3.0, prev.dur * 0.5, cur.dur * 0.5));
+        cur.trDur = Math.min(trd, maxD);
+      }
+      refreshAll();
+      updateInspector();
+      toast('Đã áp dụng chuyển cảnh "' + (TR[tr] || tr) + '" cho tất cả chỗ nối!');
     });
     safeClick('#applyAll', () => {
       S.clips.forEach((c, i) => {
         if (c.type === 'image') { c.dur = S.def.dur; c.fx = S.def.fx; c.fit = S.def.fit; }
         if (i > 0) {
           c.tr = S.def.tr;
-          c.trDur = S.def.trDur;
+          const prev = S.clips[i - 1];
+          const maxD = Math.max(0.1, Math.min(3.0, prev.dur * 0.5, c.dur * 0.5));
+          c.trDur = Math.min(S.def.trDur, maxD);
         }
       });
       refreshAll();
@@ -4337,6 +4507,221 @@ export function initStudio() {
         if (e.target === scModalEl) scModalEl.hidden = true;
       });
     }
+
+    /* ---------- CLIPCHAMP-STYLE TRANSITION MODAL ---------- */
+    let activeTrSeamIdx = 1;
+    let activeTrCategory = 'all';
+    let seamPreviewTimeout: any = null;
+
+    const toPascalCase = (key: string) => {
+      if (key === 'fade') return 'Fade';
+      if (key === 'fadeblack') return 'FadeBlack';
+      if (key === 'fadewhite') return 'FadeWhite';
+      if (key === 'slideleft') return 'SlideLeft';
+      if (key === 'slideright') return 'SlideRight';
+      if (key === 'slideup') return 'SlideUp';
+      if (key === 'slidedown') return 'SlideDown';
+      if (key === 'push') return 'Push';
+      if (key === 'wiper') return 'Wiper';
+      if (key === 'wiped') return 'Wiped';
+      if (key === 'circleopen') return 'Circle';
+      if (key === 'centeropen') return 'CenterOpen';
+      if (key === 'zoom') return 'ZoomIn';
+      if (key === 'zoomout') return 'ZoomOut';
+      if (key === 'spin') return 'Spin';
+      if (key === 'blur') return 'Blur';
+      if (key === 'flash') return 'Flash';
+      if (key === 'glitch') return 'Glitch';
+      if (key === 'flip') return 'Flip';
+      if (key === 'random') return 'Random';
+      return 'Fade';
+    };
+
+    const previewSeamTransition = (clipIdx: number) => {
+      if (clipIdx <= 0 || clipIdx >= S.clips.length) return;
+      if (S.playing) pause();
+      if (seamPreviewTimeout) { clearTimeout(seamPreviewTimeout); seamPreviewTimeout = null; }
+
+      let seamTime = 0;
+      for (let i = 0; i < clipIdx; i++) seamTime += S.clips[i].dur;
+      const c = S.clips[clipIdx], prev = S.clips[clipIdx - 1];
+      const maxD = Math.max(0.1, Math.min(3.0, prev.dur * 0.5, c.dur * 0.5));
+      const trd = Math.max(0.1, Math.min(c.trDur || 1.0, maxD));
+      const startT = Math.max(0, seamTime - 1.0);
+      const stopT = Math.min(total(), seamTime + trd + 1.0);
+
+      seek(startT);
+      resumeAudioContext('Xem thử chuyển cảnh').then(() => {
+        play();
+        const checkStop = () => {
+          if (!S.playing) return;
+          if (S.t >= stopT) {
+            pause();
+            seek(seamTime);
+          } else {
+            seamPreviewTimeout = setTimeout(checkStop, 40);
+          }
+        };
+        seamPreviewTimeout = setTimeout(checkStop, 40);
+      });
+    };
+
+    const renderTrCatTabs = () => {
+      const tabsEl = $('#trCatTabs');
+      if (!tabsEl) return;
+      const categories = [
+        { key: 'all', label: 'Tất cả' },
+        { key: 'Cơ bản', label: 'Cơ bản' },
+        { key: 'Trượt', label: 'Trượt' },
+        { key: 'Quét', label: 'Quét' },
+        { key: 'Phóng', label: 'Phóng' },
+        { key: 'Phong cách', label: 'Phong cách' },
+        { key: 'Lựa chọn', label: 'Ngẫu nhiên' }
+      ];
+      tabsEl.innerHTML = categories.map(cat =>
+        `<button type="button" class="tr-cat-tab${activeTrCategory === cat.key ? ' active' : ''}" data-cat="${cat.key}">${cat.label}</button>`
+      ).join('');
+
+      tabsEl.querySelectorAll('.tr-cat-tab').forEach((btn: any) => {
+        btn.addEventListener('click', () => {
+          activeTrCategory = (btn as HTMLElement).dataset.cat || 'all';
+          renderTrCatTabs();
+          renderTrCards();
+        });
+      });
+    };
+
+    const renderTrCards = () => {
+      const gridEl = $('#trGrid');
+      if (!gridEl) return;
+      const c = S.clips[activeTrSeamIdx];
+      if (!c) return;
+
+      const items: { key: string; label: string; icon: string; group: string }[] = [];
+      TR_GROUPS.forEach(g => {
+        if (activeTrCategory === 'all' || activeTrCategory === g.group) {
+          g.items.forEach(it => {
+            items.push({ ...it, group: g.group });
+          });
+        }
+      });
+
+      gridEl.innerHTML = items.map(it => {
+        const isSel = c.tr === it.key;
+        const animName = 'anim' + toPascalCase(it.key);
+        return `
+          <div class="tr-card${isSel ? ' active' : ''}" data-key="${it.key}" title="${esc(it.label)}">
+            <div class="tr-card-preview">
+              <div class="tr-anim-base">A</div>
+              <div class="tr-anim-layer" style="animation-name:${animName};">${it.icon}</div>
+            </div>
+            <span class="tr-card-name">${it.icon} ${esc(it.label)}</span>
+            <span class="tr-card-cat">${esc(it.group)}</span>
+          </div>
+        `;
+      }).join('');
+
+      gridEl.querySelectorAll('.tr-card').forEach((card: any) => {
+        card.addEventListener('click', () => {
+          const key = (card as HTMLElement).dataset.key || 'none';
+          pushTimelineHistory();
+          c.tr = key;
+          renderTrCards();
+          renderTimeline();
+          updateInspector();
+          draw();
+        });
+      });
+    };
+
+    const openTransitionModal = (clipIdx: number) => {
+      if (clipIdx <= 0 || clipIdx >= S.clips.length) return;
+      activeTrSeamIdx = clipIdx;
+      const modal = $('#transitionModal');
+      if (!modal) return;
+
+      const c = S.clips[clipIdx];
+      const prev = S.clips[clipIdx - 1];
+      const badge = $('#trModalSeamBadge');
+      if (badge) {
+        badge.textContent = `Nối: Clip #${clipIdx} ("${prev.name}") ➔ Clip #${clipIdx + 1} ("${c.name}")`;
+      }
+
+      const maxAllowed = Math.max(0.1, Math.min(3.0, prev.dur * 0.5, c.dur * 0.5));
+      c.trDur = Math.min(c.trDur || 1.0, maxAllowed);
+
+      const durInput = $('#trModalDur') as HTMLInputElement | null;
+      const durVal = $('#trModalDurVal');
+      const durHint = $('#trModalDurHint');
+      if (durInput) {
+        durInput.max = maxAllowed.toFixed(1);
+        durInput.value = c.trDur.toFixed(1);
+      }
+      if (durVal) durVal.textContent = c.trDur.toFixed(1) + 's';
+      if (durHint) durHint.textContent = `(Tự giới hạn tối đa 50% = ${maxAllowed.toFixed(1)}s của clip ngắn hơn)`;
+
+      renderTrCatTabs();
+      renderTrCards();
+
+      modal.hidden = false;
+    };
+
+    safeClick('#btnTrModalClose', () => { const m = $('#transitionModal'); if (m) m.hidden = true; });
+    safeClick('#btnTrModalDone', () => { const m = $('#transitionModal'); if (m) m.hidden = true; });
+    const trModalBackdrop = $('#transitionModal');
+    if (trModalBackdrop) {
+      trModalBackdrop.addEventListener('click', (e: MouseEvent) => {
+        if (e.target === trModalBackdrop) trModalBackdrop.hidden = true;
+      });
+    }
+
+    safeInput('#trModalDur', (e: any) => {
+      const c = S.clips[activeTrSeamIdx];
+      if (!c) return;
+      const prev = S.clips[activeTrSeamIdx - 1];
+      const maxAllowed = Math.max(0.1, Math.min(3.0, prev ? prev.dur * 0.5 : 3.0, c.dur * 0.5));
+      const val = clamp(+e.target.value || 1.0, 0.1, maxAllowed);
+      c.trDur = val;
+      const durVal = $('#trModalDurVal');
+      if (durVal) durVal.textContent = val.toFixed(1) + 's';
+      renderTimeline();
+      updateInspector();
+      draw();
+    });
+
+    safeClick('#btnTrModalPreview', () => {
+      previewSeamTransition(activeTrSeamIdx);
+    });
+
+    safeClick('#btnTrModalApplyAll', () => {
+      const c = S.clips[activeTrSeamIdx];
+      if (!c) return;
+      pushTimelineHistory();
+      const selTr = c.tr;
+      const selDur = c.trDur;
+      for (let j = 1; j < S.clips.length; j++) {
+        const cur = S.clips[j], prev = S.clips[j - 1];
+        cur.tr = selTr;
+        const maxD = Math.max(0.1, Math.min(3.0, prev.dur * 0.5, cur.dur * 0.5));
+        cur.trDur = Math.min(selDur, maxD);
+      }
+      refreshAll();
+      updateInspector();
+      toast(`Đã áp dụng chuyển cảnh "${TR[selTr] || selTr}" cho tất cả chỗ nối!`);
+    });
+
+    safeClick('#btnTrModalRemove', () => {
+      const c = S.clips[activeTrSeamIdx];
+      if (!c) return;
+      pushTimelineHistory();
+      c.tr = 'none';
+      renderTrCards();
+      renderTimeline();
+      updateInspector();
+      draw();
+      toast('Đã gỡ chuyển cảnh tại chỗ nối này (Cắt thẳng)');
+    });
+
     const tl = $('#tl');
     let drag = false;
     const scrubTo = (e: PointerEvent) => {
@@ -4347,19 +4732,11 @@ export function initStudio() {
     if (tl) {
       tl.addEventListener('pointerdown', (e: PointerEvent) => {
         const target = e.target as HTMLElement;
-        if (target.closest('#alane') || target.closest('#llane')) return;
+        if (target.closest('#clips') || target.closest('#alane') || target.closest('#llane')) return;
 
-        const targetEl = target.closest('.clip') as HTMLElement | null;
-        if (targetEl && targetEl.dataset.id) {
-          S.sel = +targetEl.dataset.id;
-          S.selAudioId = null;
-          S.selLyrId = null;
-          renderTimeline();
-        } else {
-          S.selAudioId = null;
-          S.selLyrId = null;
-          renderTimeline();
-        }
+        S.selAudioId = null;
+        S.selLyrId = null;
+        renderTimeline();
         drag = true;
         tl.setPointerCapture(e.pointerId);
         scrubTo(e);
@@ -4373,6 +4750,357 @@ export function initStudio() {
         drag = false;
         try { tl.releasePointerCapture(e.pointerId); } catch (err) {}
       });
+    }
+
+    // Tương tác trên track Clip (#clips): Kéo mép chỉnh độ dài & Kéo khối dời thứ tự
+    const clipsEl = $('#clips');
+    const clipTip = $('#clipDragTip');
+    const dropIndicator = $('#clipDropIndicator');
+    let cDragMode: 'body' | 'left' | 'right' | null = null;
+    let cDragClip: Clip | null = null;
+    let cDragIdx = -1;
+    let cStartX = 0;
+    let cInitDur = 0;
+    let cInitSrcIn = 0;
+    let cInitSrcOut = 0;
+    let cInitStartSec = 0;
+    let cDragHasMoved = false;
+    let targetDropIdx = -1;
+    let preClipState: TimelineHistoryState | null = null;
+
+    const getTimelineSnapPoints = (excludeClipId?: number): number[] => {
+      const pts = new Set<number>();
+      pts.add(parseFloat(S.t.toFixed(2))); // Đầu phát
+
+      // Mép các clip khác
+      let a = 0;
+      pts.add(0);
+      S.clips.forEach(c => {
+        a += c.dur;
+        if (c.id !== excludeClipId) {
+          pts.add(parseFloat(a.toFixed(2)));
+        }
+      });
+
+      // Mép các đoạn nhạc
+      S.audioBlocks.forEach(b => {
+        pts.add(parseFloat(b.start.toFixed(2)));
+        pts.add(parseFloat((b.start + b.dur).toFixed(2)));
+      });
+
+      return Array.from(pts);
+    };
+
+    const snapTime = (val: number, snapPoints: number[], thresholdSec: number): { time: number; snapped: boolean } => {
+      let closest = val;
+      let minDiff = thresholdSec;
+      let snapped = false;
+
+      for (const pt of snapPoints) {
+        const diff = Math.abs(val - pt);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closest = pt;
+          snapped = true;
+        }
+      }
+
+      // Bắt dính mốc 0.5s
+      const gridPt = Math.round(val * 2) / 2;
+      const gridDiff = Math.abs(val - gridPt);
+      if (gridDiff < minDiff && gridDiff < 0.12) {
+        closest = gridPt;
+        snapped = true;
+      }
+
+      return { time: parseFloat(closest.toFixed(2)), snapped };
+    };
+
+    if (clipsEl) {
+      clipsEl.addEventListener('pointerdown', (e: PointerEvent) => {
+        if (!S.clips.length) return;
+        const target = e.target as HTMLElement;
+
+        const seamBtn = target.closest('.trz-seam-btn') as HTMLElement | null;
+        if (seamBtn) {
+          e.stopPropagation();
+          e.preventDefault();
+          const clipIdx = +(seamBtn.dataset.clipIdx || '0');
+          if (clipIdx > 0 && clipIdx < S.clips.length) {
+            openTransitionModal(clipIdx);
+          }
+          return;
+        }
+
+        const handleLeft = target.closest('.clip-handle.left');
+        const handleRight = target.closest('.clip-handle.right');
+        const clipEl = target.closest('.clip') as HTMLElement | null;
+
+        if (!clipEl) {
+          const tlEl = $('#tl');
+          if (tlEl) {
+            const r = tlEl.getBoundingClientRect();
+            seek((e.clientX - r.left) / S.pps);
+          }
+          return;
+        }
+
+        e.stopPropagation();
+        e.preventDefault();
+
+        const cid = +(clipEl.dataset.id || 0);
+        const cIdx = S.clips.findIndex(c => c.id === cid);
+        if (cIdx < 0) return;
+        const clip = S.clips[cIdx];
+
+        let accumSec = 0;
+        for (let i = 0; i < cIdx; i++) {
+          accumSec += S.clips[i].dur;
+        }
+
+        preClipState = {
+          clips: S.clips.map(c => ({ ...c })),
+          audioBlocks: S.audioBlocks.map(b => ({ ...b })),
+          selAudioId: S.selAudioId,
+          sel: S.sel,
+          selLyrId: S.selLyrId,
+          lyr: S.lyr.map(item => ({ ...item })),
+          lrcText: formatLrcFromLyr(S.lyr),
+          fadeIn: A.fadeIn,
+          fadeOut: A.fadeOut
+        };
+
+        S.sel = clip.id;
+        S.selAudioId = null;
+        S.selLyrId = null;
+
+        cDragClip = clip;
+        cDragIdx = cIdx;
+        cStartX = e.clientX;
+        cInitDur = clip.dur;
+        cInitSrcIn = clip.srcIn;
+        cInitSrcOut = clip.srcOut;
+        cInitStartSec = accumSec;
+        cDragHasMoved = false;
+        targetDropIdx = cIdx;
+
+        if (handleLeft) {
+          cDragMode = 'left';
+        } else if (handleRight) {
+          cDragMode = 'right';
+        } else {
+          cDragMode = 'body';
+        }
+
+        clipsEl.setPointerCapture(e.pointerId);
+        renderTimeline();
+        updateInspector();
+      });
+
+      clipsEl.addEventListener('pointermove', (e: PointerEvent) => {
+        if (!cDragMode || !cDragClip) return;
+        const deltaPx = e.clientX - cStartX;
+        if (Math.abs(deltaPx) > 3) cDragHasMoved = true;
+        const deltaSec = deltaPx / S.pps;
+        const snapPts = getTimelineSnapPoints(cDragClip.id);
+        const snapThreshold = 10 / S.pps;
+
+        if (cDragMode === 'right') {
+          if (cDragClip.type === 'image') {
+            const rawTargetEnd = cInitStartSec + cInitDur + deltaSec;
+            const { time: snappedEnd, snapped } = snapTime(rawTargetEnd, snapPts, snapThreshold);
+            const newDur = Math.max(0.5, parseFloat((snappedEnd - cInitStartSec).toFixed(2)));
+            cDragClip.dur = newDur;
+
+            if (clipTip) {
+              clipTip.style.display = 'block';
+              clipTip.textContent = `▶ Kéo đuôi: Thời lượng ${cDragClip.dur.toFixed(2)}s${snapped ? ' ⚡ (Dính mốc)' : ''}`;
+              const tlScroll = $('#tlScroll');
+              const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, width: 600 };
+              clipTip.style.left = clamp(e.clientX - tlRect.left - 50, 20, tlRect.width - 240) + 'px';
+              clipTip.style.top = '2px';
+            }
+          } else {
+            // Video: kéo mép phải cắt đuôi video gốc
+            const rawTargetEnd = cInitStartSec + (cInitSrcOut - cDragClip.srcIn) + deltaSec;
+            const { time: snappedEnd, snapped } = snapTime(rawTargetEnd, snapPts, snapThreshold);
+            const shiftFromSnap = snappedEnd - (cInitStartSec + (cInitSrcOut - cDragClip.srcIn));
+            const targetSrcOut = clamp(cInitSrcOut + (snapped ? shiftFromSnap : deltaSec), cDragClip.srcIn + 0.3, cDragClip.full);
+            cDragClip.srcOut = parseFloat(targetSrcOut.toFixed(2));
+            cDragClip.dur = parseFloat((cDragClip.srcOut - cDragClip.srcIn).toFixed(2));
+
+            if (clipTip) {
+              clipTip.style.display = 'block';
+              clipTip.textContent = `▶ Cắt đuôi: ${fmt(cDragClip.srcOut)} / ${fmt(cDragClip.full)} | Dài ${cDragClip.dur.toFixed(2)}s${snapped ? ' ⚡' : ''}`;
+              const tlScroll = $('#tlScroll');
+              const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, width: 600 };
+              clipTip.style.left = clamp(e.clientX - tlRect.left - 50, 20, tlRect.width - 270) + 'px';
+              clipTip.style.top = '2px';
+            }
+          }
+          updateInspector();
+          renderTimeline();
+          draw();
+        } else if (cDragMode === 'left') {
+          if (cDragClip.type === 'image') {
+            // ẢNH: Kéo mép trái rút ngắn từ đầu (deltaSec > 0 rút ngắn dur)
+            const rawTargetStart = cInitStartSec + deltaSec;
+            const { time: snappedStart, snapped } = snapTime(rawTargetStart, snapPts, snapThreshold);
+            const shift = snappedStart - cInitStartSec;
+            const newDur = Math.max(0.5, parseFloat((cInitDur - shift).toFixed(2)));
+            cDragClip.dur = newDur;
+
+            if (clipTip) {
+              clipTip.style.display = 'block';
+              clipTip.textContent = `◀ Kéo đầu: Thời lượng ${cDragClip.dur.toFixed(2)}s${snapped ? ' ⚡ (Dính mốc)' : ''}`;
+              const tlScroll = $('#tlScroll');
+              const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, width: 600 };
+              clipTip.style.left = clamp(e.clientX - tlRect.left - 50, 20, tlRect.width - 240) + 'px';
+              clipTip.style.top = '2px';
+            }
+          } else {
+            // Video: kéo mép trái cắt đầu video gốc
+            const rawTargetStart = cInitStartSec + deltaSec;
+            const { time: snappedStart, snapped } = snapTime(rawTargetStart, snapPts, snapThreshold);
+            const shift = snappedStart - cInitStartSec;
+            const targetSrcIn = clamp(cInitSrcIn + (snapped ? shift : deltaSec), 0, cDragClip.srcOut - 0.3);
+            cDragClip.srcIn = parseFloat(targetSrcIn.toFixed(2));
+            cDragClip.dur = parseFloat((cDragClip.srcOut - cDragClip.srcIn).toFixed(2));
+
+            if (clipTip) {
+              clipTip.style.display = 'block';
+              clipTip.textContent = `◀ Cắt đầu: ${fmt(cDragClip.srcIn)} ➔ ${fmt(cDragClip.srcOut)} | Dài ${cDragClip.dur.toFixed(2)}s${snapped ? ' ⚡' : ''}`;
+              const tlScroll = $('#tlScroll');
+              const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, width: 600 };
+              clipTip.style.left = clamp(e.clientX - tlRect.left - 50, 20, tlRect.width - 270) + 'px';
+              clipTip.style.top = '2px';
+            }
+          }
+          updateInspector();
+          renderTimeline();
+          draw();
+        } else if (cDragMode === 'body') {
+          if (!cDragHasMoved) return;
+
+          const clipEl = clipsEl?.querySelector(`.clip[data-id="${cDragClip.id}"]`);
+          if (clipEl) clipEl.classList.add('dragging');
+
+          const tlRect = $('#tl')?.getBoundingClientRect() || { left: 0, width: 1000 };
+          const pointerXInTl = e.clientX - tlRect.left;
+
+          let accumPx = 0;
+          const boundaries: { idx: number; x: number }[] = [{ idx: 0, x: 0 }];
+          S.clips.forEach((c, idx) => {
+            accumPx += c.dur * S.pps;
+            boundaries.push({ idx: idx + 1, x: accumPx });
+          });
+
+          let minDist = Infinity;
+          let bestIdx = 0;
+          let bestDropX = 0;
+          boundaries.forEach(b => {
+            const dist = Math.abs(pointerXInTl - b.x);
+            if (dist < minDist) {
+              minDist = dist;
+              bestIdx = b.idx;
+              bestDropX = b.x;
+            }
+          });
+
+          targetDropIdx = bestIdx;
+
+          if (dropIndicator) {
+            dropIndicator.style.display = 'block';
+            dropIndicator.style.left = bestDropX + 'px';
+          }
+
+          if (clipTip) {
+            clipTip.style.display = 'block';
+            const displayPos = targetDropIdx > cDragIdx ? targetDropIdx : targetDropIdx + 1;
+            clipTip.textContent = `↔ Dời thứ tự: Thả vào vị trí thứ ${displayPos} / ${S.clips.length}`;
+            const tlScroll = $('#tlScroll');
+            const scrollRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, width: 600 };
+            clipTip.style.left = clamp(e.clientX - scrollRect.left - 50, 20, scrollRect.width - 240) + 'px';
+            clipTip.style.top = '2px';
+          }
+        }
+      });
+
+      const endClipDrag = (e: PointerEvent) => {
+        if (!cDragMode) return;
+
+        if (dropIndicator) dropIndicator.style.display = 'none';
+        if (clipTip) clipTip.style.display = 'none';
+
+        const clipEl = clipsEl?.querySelector(`.clip[data-id="${cDragClip?.id}"]`);
+        if (clipEl) clipEl.classList.remove('dragging');
+
+        if (cDragMode === 'body') {
+          if (cDragHasMoved && targetDropIdx >= 0 && cDragClip) {
+            const fromIdx = cDragIdx;
+            let toIdx = targetDropIdx;
+            if (toIdx > fromIdx) toIdx--;
+
+            if (toIdx !== fromIdx && toIdx >= 0 && toIdx < S.clips.length) {
+              if (preClipState) {
+                tlUndoStack.push(preClipState);
+                if (tlUndoStack.length > 50) tlUndoStack.shift();
+                tlRedoStack.length = 0;
+                updateUndoRedoUI();
+              }
+              const [moved] = S.clips.splice(fromIdx, 1);
+              S.clips.splice(toIdx, 0, moved);
+              if (S.clips.length > 0) {
+                S.clips[0].tr = 'none';
+                for (let j = 1; j < S.clips.length; j++) {
+                  const p = S.clips[j - 1], cur = S.clips[j];
+                  const maxD = Math.max(0.1, Math.min(3.0, p.dur * 0.5, cur.dur * 0.5));
+                  cur.trDur = Math.min(cur.trDur || 1.0, maxD);
+                }
+              }
+              S.sel = moved.id;
+              if (S.syncWithMusic) applyMusicSync();
+              refreshAll();
+              toast(`Đã đổi thứ tự: Clip "${moved.name}" xếp thứ ${toIdx + 1}`);
+            }
+          } else {
+            // Click chọn và dời đầu phát
+            if (cDragClip) {
+              S.sel = cDragClip.id;
+              S.selAudioId = null;
+              S.selLyrId = null;
+              const tlEl = $('#tl');
+              if (tlEl) {
+                const r = tlEl.getBoundingClientRect();
+                seek((e.clientX - r.left) / S.pps);
+              }
+              renderTimeline();
+              updateInspector();
+            }
+          }
+        } else if (cDragMode === 'left' || cDragMode === 'right') {
+          if (cDragHasMoved && preClipState) {
+            tlUndoStack.push(preClipState);
+            if (tlUndoStack.length > 50) tlUndoStack.shift();
+            tlRedoStack.length = 0;
+            updateUndoRedoUI();
+            if (S.syncWithMusic) applyMusicSync();
+            refreshAll();
+            toast(`Đã chỉnh độ dài clip: ${cDragClip?.dur.toFixed(2)}s`);
+          }
+        }
+
+        try { clipsEl?.releasePointerCapture(e.pointerId); } catch (err) {}
+        cDragMode = null;
+        cDragClip = null;
+        cDragIdx = -1;
+        preClipState = null;
+        cDragHasMoved = false;
+        targetDropIdx = -1;
+      };
+
+      clipsEl.addEventListener('pointerup', endClipDrag);
+      clipsEl.addEventListener('pointercancel', endClipDrag);
     }
 
     // Tương tác trên track Nhạc (#alane)
@@ -4645,44 +5373,77 @@ export function initStudio() {
         });
       }
     };
-    num('#iDur', (c, v) => { if (c.type === 'image' && v > 0) c.dur = clamp(v, 0.3, 600); });
-    num('#iIn', (c, v) => { if (c.type === 'video' && v >= 0) { c.srcIn = clamp(v, 0, c.srcOut - 0.3); c.dur = c.srcOut - c.srcIn; } });
-    num('#iOut', (c, v) => { if (c.type === 'video' && v > 0) { c.srcOut = clamp(v, c.srcIn + 0.3, c.full); c.dur = c.srcOut - c.srcIn; } });
-    num('#iTrD', (c, v) => { c.trDur = clamp(v || 0.6, 0.1, 3); });
+    num('#iDur', (c, v) => {
+      if (c.type === 'image' && v > 0) {
+        pushTimelineHistory();
+        c.dur = clamp(v, 0.5, 600);
+        if (S.syncWithMusic) applyMusicSync();
+      }
+    });
+    num('#iIn', (c, v) => {
+      if (c.type === 'video' && v >= 0) {
+        pushTimelineHistory();
+        c.srcIn = clamp(v, 0, c.srcOut - 0.3);
+        c.dur = c.srcOut - c.srcIn;
+        if (S.syncWithMusic) applyMusicSync();
+      }
+    });
+    num('#iOut', (c, v) => {
+      if (c.type === 'video' && v > 0) {
+        pushTimelineHistory();
+        c.srcOut = clamp(v, c.srcIn + 0.3, c.full);
+        c.dur = c.srcOut - c.srcIn;
+        if (S.syncWithMusic) applyMusicSync();
+      }
+    });
+    num('#iTrD', (c, v) => {
+      pushTimelineHistory();
+      const cIdx = S.clips.findIndex(x => x.id === c.id);
+      const prev = cIdx > 0 ? S.clips[cIdx - 1] : null;
+      const maxD = Math.max(0.1, Math.min(3.0, prev ? prev.dur * 0.5 : 3.0, c.dur * 0.5));
+      c.trDur = clamp(v || 0.6, 0.1, maxD);
+      renderTimeline();
+      draw();
+    });
 
     [['#iFit', 'fit'], ['#iFx', 'fx'], ['#iTr', 'tr'], ['#iCol', 'color']].forEach(([id, k]) => {
       const el = $(id);
       if (el) {
         el.addEventListener('change', (e: any) => {
           const c: any = selClip();
-          if (c) { c[k] = e.target.value; refreshAll(); }
+          if (c) {
+            pushTimelineHistory();
+            c[k] = e.target.value;
+            refreshAll();
+          }
         });
       }
     });
 
-    safeClick('#iL', () => { moveClip(-1); if (S.syncWithMusic) applyMusicSync(); });
-    safeClick('#iR', () => { moveClip(1); if (S.syncWithMusic) applyMusicSync(); });
-    safeClick('#iDel', () => {
-      const i = S.clips.findIndex(c => c.id === S.sel);
-      if (i < 0) return;
-      S.clips.splice(i, 1);
-      S.sel = S.clips[Math.min(i, S.clips.length - 1)]?.id ?? null;
+    safeClick('#iL', () => {
+      pushTimelineHistory();
+      moveClip(-1);
       if (S.syncWithMusic) applyMusicSync();
-      refreshAll();
     });
+    safeClick('#iR', () => {
+      pushTimelineHistory();
+      moveClip(1);
+      if (S.syncWithMusic) applyMusicSync();
+    });
+    safeClick('#iDel', deleteSelected);
     safeClick('#iDup', () => {
       const i = S.clips.findIndex(c => c.id === S.sel);
       if (i < 0) return;
+      pushTimelineHistory();
       const n = cloneClip(S.clips[i]);
+      n.name = n.name + ' (bản sao)';
       S.clips.splice(i + 1, 0, n);
       S.sel = n.id;
       if (S.syncWithMusic) applyMusicSync();
       refreshAll();
+      toast('Đã nhân bản clip: ' + n.name);
     });
-    safeClick('#tSplit', () => {
-      splitAtHead();
-      if (S.syncWithMusic) applyMusicSync();
-    });
+    safeClick('#tSplit', splitClipAtPlayhead);
 
     // xuất
     safeClick('#btnExport', exportVideo);

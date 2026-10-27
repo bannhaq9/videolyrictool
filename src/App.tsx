@@ -717,12 +717,15 @@ export default function App() {
           <div className="field">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <label htmlFor="iTr">Chuyển cảnh vào</label>
-              <button type="button" className="btn sm" id="btnPreviewClipTr" style={{ padding: '2px 8px', fontSize: '11px', height: 'auto', minHeight: 'unset' }} title="Xem thử hiệu ứng chuyển cảnh này">▶ Xem thử</button>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button type="button" className="btn sm" id="btnPreviewClipTr" style={{ padding: '2px 8px', fontSize: '11px', height: 'auto', minHeight: 'unset' }} title="Xem thử hiệu ứng chuyển cảnh này">▶ Xem thử</button>
+                <button type="button" className="btn sm" id="btnApplyClipTrAll" style={{ padding: '2px 8px', fontSize: '11px', height: 'auto', minHeight: 'unset' }} title="Áp dụng chuyển cảnh này cho tất cả chỗ nối">Áp dụng tất cả</button>
+              </div>
             </div>
             <select id="iTr"></select>
           </div>
           <div className="field">
-            <label htmlFor="iTrD">Thời gian chuyển (0.1 - 3s)</label>
+            <label htmlFor="iTrD">Thời gian chuyển (0.1 - 3s, tối đa 50% clip)</label>
             <input id="iTrD" type="number" min="0.1" max="3" step="0.1" />
           </div>
           <div className="field">
@@ -865,6 +868,10 @@ export default function App() {
               <span style={{ color: 'var(--muted)' }}>Sửa chữ câu lyric trực tiếp</span>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#ffd23f' }}>Bấm đúp (Double-click)</span>
             </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
+              <span style={{ color: 'var(--muted)' }}>Kéo mép / thân khối clip</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#00f0ff' }}>Co giãn thời lượng / Đổi thứ tự clip</span>
+            </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
               <span style={{ color: 'var(--muted)' }}>Kéo mép / kéo thân khối nhạc</span>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#38bdf8' }}>Cắt đầu đuôi / Dời vị trí</span>
@@ -875,6 +882,73 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* Clipchamp-style Transition Modal */}
+      <div id="transitionModal" hidden style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', zIndex: 66, display: 'grid', placeItems: 'center', padding: '16px' }}>
+        <div className="card" role="dialog" aria-labelledby="trModalTitle" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: '14px', padding: '18px 20px', width: 'min(100%, 720px)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 16px 40px rgba(0,0,0,0.85)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--line)', paddingBottom: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '18px' }}>✨</span>
+              <div>
+                <h2 id="trModalTitle" style={{ margin: 0, fontSize: '15px', color: 'var(--fg)', fontWeight: 700 }}>
+                  Hiệu ứng chuyển cảnh
+                </h2>
+                <span id="trModalSeamBadge" style={{ fontSize: '11px', color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
+                  Chỗ nối clip
+                </span>
+              </div>
+            </div>
+            <button className="btn sm" id="btnTrModalClose" type="button" style={{ padding: '3px 9px', fontSize: '13px' }}>✕</button>
+          </div>
+
+          {/* Nhóm danh mục hiệu ứng */}
+          <div id="trCatTabs" style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }}>
+            {/* Populated dynamically */}
+          </div>
+
+          {/* Lưới các hiệu ứng có animation xem trước */}
+          <div id="trGrid" style={{ flex: 1, minHeight: '220px', maxHeight: '340px', overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '8px', padding: '4px' }}>
+            {/* Populated dynamically */}
+          </div>
+
+          {/* Thanh chỉnh thời lượng chuyển cảnh */}
+          <div style={{ background: 'var(--panel2)', border: '1px solid var(--line)', borderRadius: '8px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '14px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '220px' }}>
+              <label htmlFor="trModalDur" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--fg)', whiteSpace: 'nowrap' }}>
+                Thời gian chuyển:
+              </label>
+              <input id="trModalDur" type="range" min="0.1" max="3.0" step="0.1" defaultValue="1.0" style={{ flex: 1, accentColor: '#00f0ff' }} />
+              <span id="trModalDurVal" style={{ minWidth: '42px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '12px', color: '#00f0ff', background: 'rgba(0,240,255,0.12)', border: '1px solid rgba(0,240,255,0.3)', padding: '2px 6px', borderRadius: '4px' }}>
+                1.0s
+              </span>
+            </div>
+            <span id="trModalDurHint" style={{ fontSize: '10.5px', color: 'var(--muted)' }}>
+              (Tự giới hạn tối đa 50% độ dài clip ngắn hơn)
+            </span>
+          </div>
+
+          {/* Thanh công cụ thao tác */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', paddingTop: '4px', borderTop: '1px solid var(--line)' }}>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button className="btn sm" id="btnTrModalPreview" type="button" title="Xem thử hiệu ứng này kèm 1s trước và 1s sau điểm nối">
+                ▶ Xem thử chỗ nối
+              </button>
+              <button className="btn sm" id="btnTrModalApplyAll" type="button" title="Áp dụng hiệu ứng và thời gian này cho tất cả chỗ nối giữa các clip">
+                Áp dụng cho tất cả chỗ nối
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <button className="btn sm danger" id="btnTrModalRemove" type="button" title="Hủy chuyển cảnh tại chỗ nối này">
+                Cắt thẳng (Không chuyển)
+              </button>
+              <button className="btn pri sm" id="btnTrModalDone" type="button">
+                Xong
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="toast" role="status" hidden></div>
     </div>
   );
