@@ -572,7 +572,9 @@ export default function App() {
                   <path d="M6 5h2v14H6zM20 5v14L9 12z" fill="currentColor" />
                 </svg>
               </button>
-              <button className="ib pri" id="bPlay" type="button" aria-label="Phát" title="Phát / Tạm dừng (Phím Space)"></button>
+              <button className="ib pri" id="bPlay" type="button" aria-label="Phát" title="Phát / Tạm dừng (Phím Space)">
+                <svg viewBox="0 0 24 24" width="18" height="18"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+              </button>
               <button className="ib" id="bStop" type="button" aria-label="Dừng (về 00:00)" title="Dừng hẳn và về 00:00">
                 <svg viewBox="0 0 24 24" width="14" height="14">
                   <rect x="5.5" y="5.5" width="13" height="13" rx="1.5" fill="currentColor" />

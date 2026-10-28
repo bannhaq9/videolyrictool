@@ -218,7 +218,16 @@ export function initStudio() {
     wfZoom: 1,
     fade: true,
     ctx: null as AudioContext | null,
+    buffer: null as AudioBuffer | null,
+    sourceNode: null as AudioBufferSourceNode | null,
+    sourceStartSec: 0,
+    sourceAudioCtxTime: 0,
+    currentAudioBlockId: null as number | null,
     gain: null as GainNode | null,
+    eqBass: null as BiquadFilterNode | null,
+    eqMid: null as BiquadFilterNode | null,
+    eqTreble: null as BiquadFilterNode | null,
+    compressor: null as DynamicsCompressorNode | null,
     analyser: null as AnalyserNode | null,
     dest: null as MediaStreamAudioDestinationNode | null,
     srcNode: null as MediaElementAudioSourceNode | null,
@@ -227,9 +236,13 @@ export function initStudio() {
     loadState: 'Chưa tải',
     error: '',
     isPreviewing: false,
+    previewSourceNode: null as AudioBufferSourceNode | null,
+    previewStartTime: 0,
+    previewOffset: 0,
     isTrimPreviewing: false,
-    rawPeaks: [] as number[],
-    buffer: null as AudioBuffer | null
+    trimSourceNode: null as AudioBufferSourceNode | null,
+    trimStartTime: 0,
+    rawPeaks: [] as number[]
   };
   A.el.preload = 'auto';
   A.el.crossOrigin = 'anonymous';
@@ -1908,11 +1921,12 @@ export function initStudio() {
 
     if (action === 'play') {
       e.stopPropagation();
+      stopAllPreviews();
       seek(item.t);
       selectLyrBlock(item.id);
-      if (!S.playing) {
-        resumeAudioContext('Nghe thử câu').then(() => { play(); });
-      }
+      resumeAudioContext('Nghe thử câu').then(() => {
+        if (!S.playing) play();
+      });
     } else if (action === 'nudge-minus') {
       e.stopPropagation();
       pushLyricHistory();
@@ -2108,10 +2122,15 @@ export function initStudio() {
 
   function setSpeed(rate: number) {
     S.speed = rate;
-    A.el.preservesPitch = true;
-    (A.el as any).webkitPreservesPitch = true;
-    (A.el as any).mozPreservesPitch = true;
-    A.el.playbackRate = rate;
+    if (A.sourceNode && A.ctx) {
+      try { A.sourceNode.playbackRate.setValueAtTime(rate, A.ctx.currentTime); } catch (e) {}
+    }
+    if (A.previewSourceNode && A.ctx) {
+      try { A.previewSourceNode.playbackRate.setValueAtTime(rate, A.ctx.currentTime); } catch (e) {}
+    }
+    if (A.trimSourceNode && A.ctx) {
+      try { A.trimSourceNode.playbackRate.setValueAtTime(rate, A.ctx.currentTime); } catch (e) {}
+    }
     if (S.playing) {
       tbase = S.t;
       t0 = performance.now();
@@ -2123,7 +2142,7 @@ export function initStudio() {
         btn.setAttribute('aria-pressed', String(isCur));
       }
     });
-    toast('Tốc độ phát: ' + rate + 'x (giữ nguyên cao độ)');
+    toast('Tốc độ phát: ' + rate + 'x');
   }
 
   function switchLyricStep(step: 1 | 2 | 3) {
@@ -2269,7 +2288,7 @@ export function initStudio() {
   }
 
   function ensureGraph(): boolean {
-    if (A.ctx && A.ctx.state !== 'closed' && A.srcNode) return true;
+    if (A.ctx && A.ctx.state !== 'closed' && A.gain && A.analyser && A.dest) return true;
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) {
@@ -2285,6 +2304,33 @@ export function initStudio() {
       if (!A.gain) {
         A.gain = A.ctx.createGain();
       }
+      if (!A.eqBass) {
+        A.eqBass = A.ctx.createBiquadFilter();
+        A.eqBass.type = 'lowshelf';
+        A.eqBass.frequency.value = 120;
+        A.eqBass.gain.value = 0;
+      }
+      if (!A.eqMid) {
+        A.eqMid = A.ctx.createBiquadFilter();
+        A.eqMid.type = 'peaking';
+        A.eqMid.frequency.value = 1000;
+        A.eqMid.Q.value = 1.0;
+        A.eqMid.gain.value = 0;
+      }
+      if (!A.eqTreble) {
+        A.eqTreble = A.ctx.createBiquadFilter();
+        A.eqTreble.type = 'highshelf';
+        A.eqTreble.frequency.value = 4500;
+        A.eqTreble.gain.value = 0;
+      }
+      if (!A.compressor) {
+        A.compressor = A.ctx.createDynamicsCompressor();
+        A.compressor.threshold.value = -24;
+        A.compressor.knee.value = 30;
+        A.compressor.ratio.value = 12;
+        A.compressor.attack.value = 0.003;
+        A.compressor.release.value = 0.25;
+      }
       if (!A.analyser) {
         A.analyser = A.ctx.createAnalyser();
         A.analyser.fftSize = 256;
@@ -2293,13 +2339,22 @@ export function initStudio() {
       if (!A.dest) {
         A.dest = A.ctx.createMediaStreamDestination();
       }
-      if (!A.srcNode) {
-        A.srcNode = A.ctx.createMediaElementSource(A.el);
-        A.srcNode.connect(A.gain);
-        A.gain.connect(A.analyser);
-        A.analyser.connect(A.ctx.destination);
-        A.analyser.connect(A.dest);
-      }
+
+      // Xây dựng chuỗi hiệu ứng: Gain -> EQ Bass -> EQ Mid -> EQ Treble -> Compressor -> Analyser -> [Loa, MediaStreamDestination]
+      A.gain.disconnect();
+      A.gain.connect(A.eqBass);
+      A.eqBass.disconnect();
+      A.eqBass.connect(A.eqMid);
+      A.eqMid.disconnect();
+      A.eqMid.connect(A.eqTreble);
+      A.eqTreble.disconnect();
+      A.eqTreble.connect(A.compressor);
+      A.compressor.disconnect();
+      A.compressor.connect(A.analyser);
+      A.analyser.disconnect();
+      A.analyser.connect(A.ctx.destination);
+      A.analyser.connect(A.dest);
+
       updateAudioStatus();
       return true;
     } catch (e: any) {
@@ -2330,9 +2385,13 @@ export function initStudio() {
     return true;
   }
 
+  function isAudioPlaying(): boolean {
+    return (S.playing && !!A.sourceNode) || A.isPreviewing || A.isTrimPreviewing;
+  }
+
   let vuRaf = 0;
   function updateVUMeter() {
-    if (!A.analyser || (!S.playing && !A.isPreviewing && A.el.paused)) {
+    if (!A.analyser || !isAudioPlaying()) {
       const fill = $('#vuFill');
       const val = $('#vuVal');
       if (fill) fill.style.width = '0%';
@@ -2367,10 +2426,29 @@ export function initStudio() {
     vuRaf = requestAnimationFrame(updateVUMeter);
   }
 
+  function getPreviewCurrentTime(): number {
+    if (!A.isPreviewing || !A.ctx) return A.previewOffset;
+    const speed = S.speed || 1.0;
+    const elapsed = (A.ctx.currentTime - A.previewStartTime) * speed;
+    return clamp(A.previewOffset + elapsed, 0, A.dur || 0);
+  }
+
+  let prevRaf = 0;
+  function tickPreview() {
+    if (!A.isPreviewing) return;
+    const cur = getPreviewCurrentTime();
+    if (cur >= (A.dur || 0) - 0.05) {
+      stopPreview();
+      return;
+    }
+    updatePreviewUI();
+    prevRaf = requestAnimationFrame(tickPreview);
+  }
+
   function updatePreviewUI() {
-    const cur = A.el.currentTime || 0;
-    const dur = A.dur || A.el.duration || 0;
-    const scrub = $('#prevScrub');
+    const cur = getPreviewCurrentTime();
+    const dur = A.dur || 0;
+    const scrub = $('#prevScrub') as HTMLInputElement | null;
     const timeLbl = $('#prevTimeLbl');
     if (scrub) {
       scrub.max = dur.toFixed(2);
@@ -2388,36 +2466,78 @@ export function initStudio() {
   }
 
   async function startPreview() {
-    if (!A.loaded && !A.el.src) {
+    if (!A.loaded || !A.buffer) {
       return toast('Hãy chọn file nhạc trước.');
     }
+    stopAllPreviews();
     if (S.playing) pause();
     await resumeAudioContext('Nghe thử');
-    A.isPreviewing = true;
-    applyVol(true);
+
+    if (A.previewOffset >= (A.dur || 0) - 0.1) {
+      A.previewOffset = 0;
+    }
+
     try {
-      await A.el.play();
-      toast('Đang phát nghe thử file nhạc độc lập');
+      const src = A.ctx!.createBufferSource();
+      src.buffer = A.buffer;
+      src.playbackRate.value = S.speed || 1.0;
+      src.connect(A.gain!);
+      const offset = clamp(A.previewOffset, 0, A.buffer.duration);
+      src.start(0, offset);
+      A.previewSourceNode = src;
+      A.previewStartTime = A.ctx!.currentTime;
+      A.isPreviewing = true;
+      applyVol(true);
+      src.onended = () => {
+        if (A.isPreviewing && A.previewSourceNode === src) {
+          stopPreview();
+        }
+      };
+      toast('Đang phát nghe thử file nhạc qua Audio Engine');
     } catch (e: any) {
       setAudioError('Lỗi phát nghe thử: ' + (e?.message || e));
       A.isPreviewing = false;
     }
+    updatePreviewUI();
     updateAudioStatus();
     startVUMeter();
+    cancelAnimationFrame(prevRaf);
+    prevRaf = requestAnimationFrame(tickPreview);
   }
 
   function pausePreview() {
-    A.el.pause();
+    cancelAnimationFrame(prevRaf);
+    if (A.isPreviewing && A.ctx) {
+      A.previewOffset = getPreviewCurrentTime();
+    }
+    if (A.previewSourceNode) {
+      try {
+        A.previewSourceNode.onended = null;
+        A.previewSourceNode.stop();
+        A.previewSourceNode.disconnect();
+      } catch (e) {}
+      A.previewSourceNode = null;
+    }
     A.isPreviewing = false;
+    updatePreviewUI();
     updateAudioStatus();
   }
 
   function stopPreview() {
-    A.el.pause();
-    A.el.currentTime = 0;
+    cancelAnimationFrame(prevRaf);
+    if (A.previewSourceNode) {
+      try {
+        A.previewSourceNode.onended = null;
+        A.previewSourceNode.stop();
+        A.previewSourceNode.disconnect();
+      } catch (e) {}
+      A.previewSourceNode = null;
+    }
     A.isPreviewing = false;
-    const scrub = $('#prevScrub');
-    if (scrub) scrub.value = 0;
+    A.previewOffset = 0;
+    const scrub = $('#prevScrub') as HTMLInputElement | null;
+    if (scrub) scrub.value = '0';
+    updatePreviewUI();
     updateAudioStatus();
   }
 
@@ -2641,6 +2761,25 @@ export function initStudio() {
     if (fadeOutInput && !fadeOutInput.matches(':focus')) fadeOutInput.value = A.fadeOut.toFixed(1);
   }
 
+  function getTrimCurrentTime(): number {
+    if (!A.isTrimPreviewing || !A.ctx) return A.start;
+    const speed = S.speed || 1.0;
+    const elapsed = (A.ctx.currentTime - A.trimStartTime) * speed;
+    return clamp(A.start + elapsed, A.start, A.end);
+  }
+
+  let trimRaf = 0;
+  function tickTrim() {
+    if (!A.isTrimPreviewing) return;
+    const cur = getTrimCurrentTime();
+    if (cur >= A.end - 0.05) {
+      stopTrimPreview();
+      return;
+    }
+    updateTrimPlayhead();
+    trimRaf = requestAnimationFrame(tickTrim);
+  }
+
   function updateTrimPlayhead() {
     const playhead = $('#wfPlayhead');
     const timeLbl = $('#wfPlayTime');
@@ -2652,12 +2791,7 @@ export function initStudio() {
       return;
     }
 
-    const cur = A.el.currentTime;
-    if (cur >= A.end || cur < A.start) {
-      stopTrimPreview();
-      return;
-    }
-
+    const cur = getTrimCurrentTime();
     if (playhead) {
       playhead.hidden = false;
       playhead.style.left = ((cur / dur) * trackWidth) + 'px';
@@ -2669,15 +2803,27 @@ export function initStudio() {
   }
 
   async function startTrimPreview() {
-    if (!A.loaded || A.dur <= 0) return toast('Hãy chọn file nhạc trước.');
+    if (!A.loaded || !A.buffer || A.dur <= 0) return toast('Hãy chọn file nhạc trước.');
+    stopAllPreviews();
     if (S.playing) pause();
     await resumeAudioContext('Nghe thử đoạn chọn');
 
-    A.isTrimPreviewing = true;
-    A.el.currentTime = A.start;
-    applyVol(true);
+    const sliceDur = Math.max(0.1, A.end - A.start);
     try {
-      await A.el.play();
+      const src = A.ctx!.createBufferSource();
+      src.buffer = A.buffer;
+      src.playbackRate.value = S.speed || 1.0;
+      src.connect(A.gain!);
+      src.start(0, A.start, sliceDur);
+      A.trimSourceNode = src;
+      A.trimStartTime = A.ctx!.currentTime;
+      A.isTrimPreviewing = true;
+      applyVol(true);
+      src.onended = () => {
+        if (A.isTrimPreviewing && A.trimSourceNode === src) {
+          stopTrimPreview();
+        }
+      };
       toast('Đang nghe thử đoạn: ' + fmt(A.start) + ' -> ' + fmt(A.end));
     } catch (e: any) {
       setAudioError('Lỗi phát nghe thử: ' + (e?.message || e));
@@ -2687,11 +2833,21 @@ export function initStudio() {
     if (btn) btn.textContent = '⏸ Tạm dừng';
     startVUMeter();
     updateTrimPlayhead();
+    cancelAnimationFrame(trimRaf);
+    trimRaf = requestAnimationFrame(tickTrim);
   }
 
   function stopTrimPreview() {
+    cancelAnimationFrame(trimRaf);
+    if (A.trimSourceNode) {
+      try {
+        A.trimSourceNode.onended = null;
+        A.trimSourceNode.stop();
+        A.trimSourceNode.disconnect();
+      } catch (e) {}
+      A.trimSourceNode = null;
+    }
     A.isTrimPreviewing = false;
-    A.el.pause();
     const btn = $('#btnPlayTrim');
     if (btn) btn.textContent = '▶ Nghe thử đoạn chọn';
     const playhead = $('#wfPlayhead');
@@ -2704,7 +2860,7 @@ export function initStudio() {
     let f = 1;
     const segDur = musicDuration();
     if (segDur > 0) {
-      const pos = A.isTrimPreviewing ? Math.max(0, A.el.currentTime - A.start) : S.t;
+      const pos = A.isTrimPreviewing ? Math.max(0, getTrimCurrentTime() - A.start) : S.t;
       // Fade vào
       let fIn = 1;
       if (A.fadeIn > 0) {
@@ -2719,8 +2875,8 @@ export function initStudio() {
       f = fIn * fOut;
     }
     const targetVol = clamp(A.vol * f, 0, 1);
-    if (A.gain) {
-      A.gain.gain.value = targetVol;
+    if (A.gain && A.ctx) {
+      A.gain.gain.setValueAtTime(targetVol, A.ctx.currentTime);
     }
     A.el.volume = clamp(A.vol, 0, 1);
   }
@@ -2785,13 +2941,43 @@ export function initStudio() {
       const totalFrames = Math.max(1, Math.ceil(totalDur * sampleRate));
       const offlineCtx = new OfflineAudioContext(numChannels, totalFrames, sampleRate);
 
+      // Chuỗi hiệu ứng ngoại tuyến (Gain -> EQ Bass/Mid/Treble -> Compressor -> offlineCtx.destination)
+      const offGain = offlineCtx.createGain();
+      offGain.gain.value = A.vol;
+
+      const offEqBass = offlineCtx.createBiquadFilter();
+      offEqBass.type = 'lowshelf';
+      offEqBass.frequency.value = 120;
+      offEqBass.gain.value = 0;
+
+      const offEqMid = offlineCtx.createBiquadFilter();
+      offEqMid.type = 'peaking';
+      offEqMid.frequency.value = 1000;
+      offEqMid.Q.value = 1.0;
+      offEqMid.gain.value = 0;
+
+      const offEqTreble = offlineCtx.createBiquadFilter();
+      offEqTreble.type = 'highshelf';
+      offEqTreble.frequency.value = 4500;
+      offEqTreble.gain.value = 0;
+
+      const offComp = offlineCtx.createDynamicsCompressor();
+      offComp.threshold.value = -24;
+      offComp.knee.value = 30;
+      offComp.ratio.value = 12;
+      offComp.attack.value = 0.003;
+      offComp.release.value = 0.25;
+
+      offGain.connect(offEqBass);
+      offEqBass.connect(offEqMid);
+      offEqMid.connect(offEqTreble);
+      offEqTreble.connect(offComp);
+      offComp.connect(offlineCtx.destination);
+
       blocks.forEach(b => {
         const src = offlineCtx.createBufferSource();
         src.buffer = rawBuf;
-        const gain = offlineCtx.createGain();
-        gain.gain.value = A.vol;
-        src.connect(gain);
-        gain.connect(offlineCtx.destination);
+        src.connect(offGain);
         src.start(b.start, b.srcIn, b.dur);
       });
 
@@ -2848,6 +3034,47 @@ export function initStudio() {
     }
   }
 
+  function stopAudioNode() {
+    if (A.sourceNode) {
+      try {
+        A.sourceNode.onended = null;
+        A.sourceNode.stop();
+        A.sourceNode.disconnect();
+      } catch (e) {}
+      A.sourceNode = null;
+    }
+    A.currentAudioBlockId = null;
+  }
+
+  function startAudioNode(fileSec: number, maxDur?: number, blockId?: number | null) {
+    stopAudioNode();
+    if (!A.buffer || !A.ctx) return;
+    try {
+      const src = A.ctx.createBufferSource();
+      src.buffer = A.buffer;
+      src.playbackRate.value = S.speed || 1.0;
+      src.connect(A.gain!);
+      const offset = clamp(fileSec, 0, A.buffer.duration);
+      if (maxDur != null && maxDur > 0) {
+        src.start(0, offset, maxDur);
+      } else {
+        src.start(0, offset);
+      }
+      A.sourceNode = src;
+      A.sourceStartSec = fileSec;
+      A.sourceAudioCtxTime = A.ctx.currentTime;
+      A.currentAudioBlockId = blockId ?? null;
+      src.onended = () => {
+        if (A.sourceNode === src) {
+          A.sourceNode = null;
+          A.currentAudioBlockId = null;
+        }
+      };
+    } catch (e) {
+      console.warn('startAudioNode error:', e);
+    }
+  }
+
   async function startAudio() {
     if (!A.loaded || !S.audioBlocks.length) return;
     ensureGraph();
@@ -2859,21 +3086,12 @@ export function initStudio() {
     }
     const act = getActiveAudioAt(S.t);
     if (!act) {
-      if (!A.el.paused) A.el.pause();
+      stopAudioNode();
       return;
     }
-    A.el.currentTime = act.fileSec;
-    A.el.preservesPitch = true;
-    (A.el as any).webkitPreservesPitch = true;
-    (A.el as any).mozPreservesPitch = true;
-    A.el.playbackRate = S.speed || 1.0;
+    const remInBlock = Math.max(0.05, act.block.srcOut - act.fileSec);
     applyVol(false);
-    try {
-      await A.el.play();
-    } catch (e: any) {
-      console.warn('Audio play error:', e);
-      setAudioError('Không thể phát nhạc: ' + (e?.message || e));
-    }
+    startAudioNode(act.fileSec, remInBlock, act.block.id);
     updateAudioStatus();
     startVUMeter();
   }
@@ -2882,14 +3100,19 @@ export function initStudio() {
     if (!A.loaded || !S.audioBlocks.length) return;
     const act = getActiveAudioAt(S.t);
     if (!act) {
-      if (!A.el.paused) A.el.pause();
+      if (A.sourceNode) stopAudioNode();
       return;
     }
-    if (act && A.el.paused && S.playing) {
-      A.el.play().catch(() => {});
-    }
-    if (Math.abs(A.el.currentTime - act.fileSec) > 0.35) {
-      A.el.currentTime = act.fileSec;
+    const remInBlock = Math.max(0.05, act.block.srcOut - act.fileSec);
+    if (!A.sourceNode || A.currentAudioBlockId !== act.block.id) {
+      startAudioNode(act.fileSec, remInBlock, act.block.id);
+    } else if (A.ctx) {
+      const speed = S.speed || 1.0;
+      const elapsed = (A.ctx.currentTime - A.sourceAudioCtxTime) * speed;
+      const expectedFileSec = A.sourceStartSec + elapsed;
+      if (Math.abs(expectedFileSec - act.fileSec) > 0.18) {
+        startAudioNode(act.fileSec, remInBlock, act.block.id);
+      }
     }
     applyVol(false);
   }
@@ -2943,9 +3166,8 @@ export function initStudio() {
   }
   function play() {
     if (S.playing || !S.clips.length) return;
-    stopTransitionPreview();
-    if (A.isPreviewing) stopPreview();
-    if (S.t >= total() - 0.01) S.t = 0;
+    stopAllPreviews();
+    if (S.t >= total() - 0.05) S.t = 0;
     S.playing = true;
     tbase = S.t;
     t0 = performance.now();
@@ -2956,7 +3178,8 @@ export function initStudio() {
   function halt() {
     S.playing = false;
     cancelAnimationFrame(raf);
-    A.el.pause();
+    stopAudioNode();
+    if (A.el && !A.el.paused) A.el.pause();
     S.clips.forEach(c => {
       if (c.type === 'video' && !c.el.paused) c.el.pause();
     });
@@ -2984,15 +3207,50 @@ export function initStudio() {
     if (A.loaded) {
       const act = getActiveAudioAt(S.t);
       if (act) {
-        A.el.currentTime = act.fileSec;
-      } else if (!A.el.paused) {
-        A.el.pause();
+        if (S.playing) {
+          const remInBlock = Math.max(0.05, act.block.srcOut - act.fileSec);
+          startAudioNode(act.fileSec, remInBlock, act.block.id);
+        } else {
+          stopAudioNode();
+        }
+      } else {
+        stopAudioNode();
       }
     }
     syncVideos(S.t, S.playing);
     draw();
     updateUI();
     updateActiveLyricCard(S.t);
+  }
+
+  function isAnyPreviewActive(): boolean {
+    return isPreviewingTr || A.isPreviewing || A.isTrimPreviewing;
+  }
+
+  function stopAllPreviews() {
+    if (isPreviewingTr) stopTransitionPreview();
+    if (A.isPreviewing) stopPreview();
+    if (A.isTrimPreviewing) stopTrimPreview();
+  }
+
+  async function togglePlay() {
+    if (isAnyPreviewActive()) {
+      stopAllPreviews();
+      updateUI();
+      return;
+    }
+
+    if (S.playing) {
+      pause();
+    } else {
+      stopAllPreviews();
+      if (S.t >= total() - 0.05) {
+        S.t = 0;
+        seek(0);
+      }
+      await resumeAudioContext('Nút Phát');
+      play();
+    }
   }
 
   /* ---------- giao diện ---------- */
@@ -3055,8 +3313,7 @@ export function initStudio() {
 
   function stopPlayback() {
     halt();
-    if (A.isPreviewing) stopPreview();
-    if (A.isTrimPreviewing) stopTrimPreview();
+    stopAllPreviews();
     seek(0);
     updateUI();
     toast('Đã dừng phát và về 00:00');
@@ -3064,20 +3321,39 @@ export function initStudio() {
 
   function updateUI() {
     const T = total();
-    $('#scrub').max = T.toFixed(2);
-    $('#scrub').value = S.t;
-    $('#timeLbl').textContent = fmt(S.t) + ' / ' + fmt(T);
-    $('#bPlay').innerHTML = S.playing ? ICON_PAUSE : ICON_PLAY;
-    $('#bPlay').setAttribute('aria-label', S.playing ? 'Tạm dừng' : 'Phát');
+    const scrub = $('#scrub') as HTMLInputElement | null;
+    if (scrub) {
+      scrub.max = T.toFixed(2);
+      if (!scrub.matches(':active')) {
+        scrub.value = String(S.t);
+      }
+    }
+    const timeLbl = $('#timeLbl');
+    if (timeLbl) timeLbl.textContent = fmt(S.t) + ' / ' + fmt(T);
+
+    const bPlay = $('#bPlay');
+    if (bPlay) {
+      const isPl = S.playing && !isAnyPreviewActive();
+      const plStr = isPl ? '1' : '0';
+      if (bPlay.dataset.playing !== plStr) {
+        bPlay.dataset.playing = plStr;
+        bPlay.innerHTML = isPl ? ICON_PAUSE : ICON_PLAY;
+        bPlay.setAttribute('aria-label', isPl ? 'Tạm dừng (Phím Space)' : 'Phát (Phím Space)');
+        bPlay.setAttribute('title', isPl ? 'Tạm dừng (Phím Space)' : 'Phát (Phím Space)');
+      }
+    }
     const ph = $('#ph');
     if (ph) ph.style.left = (S.t * S.pps) + 'px';
     if (S.playing) {
       const sc = $('#tlScroll'), x = S.t * S.pps;
-      if (x > sc.scrollLeft + sc.clientWidth - 40 || x < sc.scrollLeft) {
+      if (sc && (x > sc.scrollLeft + sc.clientWidth - 40 || x < sc.scrollLeft)) {
         sc.scrollLeft = Math.max(0, x - 40);
       }
     }
-    if (exporting && T > 0) $('#expBar').style.width = (S.t / T * 100).toFixed(1) + '%';
+    if (exporting && T > 0) {
+      const expBar = $('#expBar');
+      if (expBar) expBar.style.width = (S.t / T * 100).toFixed(1) + '%';
+    }
     const lyrPh = $('#lyrWfPlayhead');
     if (lyrPh) {
       const dur = Math.max(total(), A.dur || 1);
@@ -3779,23 +4055,18 @@ export function initStudio() {
       return;
     }
 
-    // Phím Space: Phát / Tạm dừng hoặc Căn giờ câu (nếu đang ở Bước 2)
-    if (e.code === 'Space') {
+    // Phím Space: Toggle Phát / Tạm dừng (hoặc Căn giờ câu nếu đang ở Bước 2)
+    if (e.code === 'Space' || e.key === ' ' || e.keyCode === 32) {
       if (tg === 'BUTTON') return;
       e.preventDefault();
+      e.stopPropagation();
 
       if (currentLyrStep === 2) {
         tapMarkNow();
         return;
       }
 
-      if (S.playing) pause();
-      else {
-        if (A.isPreviewing) stopPreview();
-        resumeAudioContext('Phím Space').then(() => {
-          play();
-        });
-      }
+      togglePlay();
       return;
     }
   }
@@ -4165,48 +4436,17 @@ export function initStudio() {
       stopPreview();
     });
     safeInput('#prevScrub', (e: any) => {
-      if (A.el) {
-        A.el.currentTime = +e.target.value;
+      A.previewOffset = +e.target.value;
+      if (A.isPreviewing) {
+        startPreview();
+      } else {
         updatePreviewUI();
       }
     });
 
-    A.el.addEventListener('error', () => {
-      const err = A.el.error;
-      let msg = 'Lỗi phát file nhạc';
-      if (err) {
-        if (err.code === 1) msg = 'Phát nhạc bị hủy';
-        else if (err.code === 2) msg = 'Lỗi mạng khi tải nhạc';
-        else if (err.code === 3) msg = 'Lỗi giải mã audio';
-        else if (err.code === 4) msg = 'Định dạng file không được hỗ trợ bởi trình duyệt';
-        if (err.message) msg += ' (' + err.message + ')';
-      }
-      setAudioError(msg);
-      updateAudioStatus();
-    });
-    A.el.addEventListener('timeupdate', () => {
-      if (A.isPreviewing) updatePreviewUI();
-      if (A.isTrimPreviewing) updateTrimPlayhead();
-    });
-    A.el.addEventListener('play', () => {
-      startVUMeter();
-      updateAudioStatus();
-    });
-    A.el.addEventListener('pause', () => {
-      updateAudioStatus();
-    });
-    A.el.addEventListener('ended', () => {
-      if (A.isPreviewing) stopPreview();
-      if (A.isTrimPreviewing) stopTrimPreview();
-      updateAudioStatus();
-    });
-
     safeClick('#rmAudio', () => {
       halt();
-      if (A.isPreviewing) stopPreview();
-      if (A.isTrimPreviewing) stopTrimPreview();
-      A.el.removeAttribute('src');
-      A.el.load();
+      stopAllPreviews();
       A.loaded = false;
       A.file = null;
       A.buffer = null;
@@ -4465,15 +4705,14 @@ export function initStudio() {
     });
 
     // phát
-    safeClick('#bPlay', async () => {
-      if (A.isPreviewing) stopPreview();
-      if (S.playing) {
-        pause();
-      } else {
-        await resumeAudioContext('Nút Phát');
-        play();
-      }
-    });
+    const bPlayEl = $('#bPlay');
+    if (bPlayEl) {
+      bPlayEl.addEventListener('click', (e: MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        togglePlay();
+      });
+    }
     safeClick('#bStart', () => seek(0));
     safeClick('#bStop', stopPlayback);
     safeOn('#scrub', 'input', (e: any) => seek(+e.target.value));
