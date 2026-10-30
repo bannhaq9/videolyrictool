@@ -15,132 +15,213 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app">
-      <header className="top">
-        <h1>
-          Lyric Video Studio
-          <small>Ghép ảnh, video và nhạc thành video có lời chạy theo bài hát</small>
-        </h1>
-        <div className="grp">
-          <div className="seg" role="group" aria-label="Định dạng khung hình">
-            <button id="oV" aria-pressed="true">Dọc 9:16</button>
-            <button id="oH" aria-pressed="false">Ngang 16:9</button>
+    <div className="studio-app">
+      {/* 1. THANH TRÊN CÙNG (56px) */}
+      <header className="studio-header">
+        <div className="header-left">
+          <div className="brand-badge" title="Lyric Video Studio">
+            <span className="brand-icon">♫</span>
+            <span>Lyric Video Studio</span>
           </div>
-          <select id="res" aria-label="Độ phân giải" style={{ width: 'auto' }}>
+
+          <div className="project-title-box">
+            <input
+              id="projectTitleInput"
+              type="text"
+              defaultValue="Dự án chưa đặt tên"
+              title="Bấm để đổi tên dự án"
+              className="project-title-input"
+            />
+            <span className="project-edit-icon">✎</span>
+          </div>
+        </div>
+
+        <div className="header-center">
+          <button type="button" className="header-btn" id="btnTopUndo" title="Hoàn tác (Ctrl+Z)" disabled>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+              <path d="M12.5 8c-2.65 0-5.05 1-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/>
+            </svg>
+            <span>Hoàn tác</span>
+          </button>
+          <button type="button" className="header-btn" id="btnTopRedo" title="Làm lại (Ctrl+Y)" disabled>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+              <path d="M18.4 10.6C16.55 9 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z"/>
+            </svg>
+            <span>Làm lại</span>
+          </button>
+        </div>
+
+        <div className="header-right">
+          <div className="segmented-control" role="group" aria-label="Tỷ lệ khung hình">
+            <button id="oV" aria-pressed="true" title="Khung dọc 9:16 (TikTok, Reels, Shorts)">
+              <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><rect x="4" y="1" width="8" height="14" rx="1.5" /></svg>
+              <span>9:16</span>
+            </button>
+            <button id="oH" aria-pressed="false" title="Khung ngang 16:9 (YouTube, Máy tính)">
+              <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><rect x="1" y="4" width="14" height="8" rx="1.5" /></svg>
+              <span>16:9</span>
+            </button>
+          </div>
+
+          <select id="res" aria-label="Độ phân giải" className="quality-select">
             <option value="720">720p (nhanh)</option>
             <option value="1080">1080p (nét)</option>
           </select>
-          <button className="btn pri" id="btnExport">Xuất video</button>
+
+          <button className="btn-export-teal" id="btnExport" type="button" title="Xuất video hoàn chỉnh">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 19V5M5 12l7-7 7 7"/>
+            </svg>
+            <span>Xuất video</span>
+          </button>
         </div>
       </header>
 
-      <div className="main">
-        <section className="panel" aria-label="Công cụ">
-          <div className="tabs" role="tablist">
-            <button role="tab" data-tab="media" aria-selected="true">Hình</button>
-            <button role="tab" data-tab="music" aria-selected="false">Nhạc</button>
-            <button role="tab" data-tab="lyric" aria-selected="false">Lyric</button>
-            <button role="tab" data-tab="text" aria-selected="false">Chữ</button>
+      {/* 2. VÙNG GIỮA (MIDDLE WORKSPACE) */}
+      <div className="studio-middle">
+        {/* DOCK ICON BÊN TRÁI (64px) */}
+        <nav className="nav-dock" aria-label="Thanh công cụ">
+          <button type="button" className="nav-dock-btn active" data-tab="media" title="Thư viện tệp ảnh & video">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+            </svg>
+            <span>Thư viện</span>
+          </button>
+
+          <button type="button" className="nav-dock-btn" data-tab="music" title="Quản lý nhạc & âm thanh">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+            </svg>
+            <span>Nhạc</span>
+          </button>
+
+          <button type="button" className="nav-dock-btn" data-tab="visual" title="Hiệu ứng sóng nhạc">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
+            </svg>
+            <span>Sóng nhạc</span>
+          </button>
+
+          <button type="button" className="nav-dock-btn" data-tab="lyric" title="Căn chỉnh lời bài hát (Lyric)">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V8h10v2z"/>
+            </svg>
+            <span>Lyric</span>
+          </button>
+
+          <button type="button" className="nav-dock-btn" data-tab="text" title="Định dạng chữ & Font">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M5 4v3h5.5v12h3V7H19V4H5z"/>
+            </svg>
+            <span>Chữ</span>
+          </button>
+        </nav>
+
+        {/* PANEL NỘI DUNG BÊN TRÁI (320px) */}
+        <aside className="studio-drawer" id="studioDrawer" aria-label="Bảng nội dung tab">
+          <div className="drawer-header">
+            <span id="drawerTitle">Thư viện media</span>
+            <button type="button" className="btn sm" id="btnToggleDrawer" title="Thu gọn / Mở rộng bảng">⇥</button>
           </div>
 
-          <div className="tabpane" data-pane="media">
-            <label className="drop" id="drop1" htmlFor="fileMedia">
-              <strong>Thêm ảnh hoặc video</strong>
-              <span>Bấm chọn hoặc kéo thả vào đây, chọn được nhiều file</span>
-            </label>
-            <input id="fileMedia" type="file" accept="image/*,video/*" multiple hidden />
-            <p className="note" id="sampleNote">Đang hiện ảnh mẫu và lời mẫu. Thêm ảnh của bạn thì phần mẫu sẽ tự mất.</p>
-            <div className="row2">
+          <div className="drawer-scroll">
+            {/* TAB THƯ VIỆN */}
+            <div className="tabpane" data-pane="media">
+              <label className="import-purple-btn" htmlFor="fileMedia">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>+ Thêm tệp media</span>
+              </label>
+              <input id="fileMedia" type="file" accept="image/*,video/*" multiple hidden />
+
               <div className="field">
-                <label htmlFor="defDur">Giây mỗi ảnh</label>
-                <input id="defDur" type="number" min="0.5" max="60" step="0.5" defaultValue="4" />
+                <label>Tệp media đã thêm</label>
+                <div id="mediaDrawerCards" className="media-drawer-cards-grid"></div>
               </div>
-              <div className="field">
-                <label htmlFor="defFit">Khung ảnh</label>
-                <select id="defFit" defaultValue="cover">
-                  <option value="cover">Phủ kín khung</option>
-                  <option value="contain">Vừa ảnh, nền mờ</option>
-                </select>
-              </div>
-            </div>
-            <div className="row2">
-              <div className="field">
-                <label htmlFor="defFx">Chuyển động ảnh</label>
-                <select id="defFx"></select>
-              </div>
-              <div className="field">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label htmlFor="defTr">Chuyển cảnh</label>
-                  <button type="button" className="btn sm" id="btnPreviewTr" style={{ padding: '2px 8px', fontSize: '11px', height: 'auto', minHeight: 'unset' }} title="Xem thử hiệu ứng trên hai ảnh mẫu">▶ Xem thử</button>
+
+              <label className="drop" id="drop1" htmlFor="fileMedia">
+                <strong>Kéo thả tệp vào đây</strong>
+                <span>Chọn được nhiều ảnh và video cùng lúc</span>
+              </label>
+              <p className="note" id="sampleNote">Đang dùng mẫu "Hoa nở bên tường.jpg". Thêm tệp của bạn thì mẫu sẽ tự cập nhật.</p>
+
+              <div className="row2">
+                <div className="field">
+                  <label htmlFor="defDur">Giây mỗi ảnh</label>
+                  <input id="defDur" type="number" min="0.5" max="60" step="0.5" defaultValue="4" />
                 </div>
-                <select id="defTr"></select>
+                <div className="field">
+                  <label htmlFor="defFit">Khung ảnh</label>
+                  <select id="defFit" defaultValue="cover">
+                    <option value="cover">Phủ kín khung (Cover)</option>
+                    <option value="contain">Vừa ảnh, nền mờ (Contain)</option>
+                  </select>
+                </div>
               </div>
-            </div>
-            <div className="row2">
+
+              <div className="row2">
+                <div className="field">
+                  <label htmlFor="defFx">Chuyển động</label>
+                  <select id="defFx"></select>
+                </div>
+                <div className="field">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label htmlFor="defTr">Chuyển cảnh</label>
+                    <button type="button" className="btn sm" id="btnPreviewTr" style={{ padding: '2px 6px', fontSize: '10.5px' }}>▶ Xem</button>
+                  </div>
+                  <select id="defTr"></select>
+                </div>
+              </div>
+
               <div className="field">
-                <label htmlFor="defTrD">Thời gian chuyển mặc định (0.1 - 3s)</label>
+                <label htmlFor="defTrD">Thời gian chuyển (0.1 - 3s)</label>
                 <input id="defTrD" type="number" min="0.1" max="3" step="0.1" defaultValue="0.6" />
               </div>
-            </div>
-            <div className="btns">
-              <button className="btn" id="applyAll">Áp dụng cho mọi clip</button>
-            </div>
-            <p className="note">Ảnh dọc làm video ngang (hoặc ngược lại) thì chọn &quot;Vừa ảnh, nền mờ&quot; để không bị cắt mất phần ảnh.</p>
-          </div>
 
-          <div className="tabpane" data-pane="music" hidden>
-            <label className="drop" htmlFor="fileAudio">
-              <strong>Chọn file nhạc</strong>
-              <span>MP3, M4A, WAV, OGG</span>
-            </label>
-            <input id="fileAudio" type="file" accept="audio/*" hidden />
-            <p className="note" id="audioInfo">Chưa có nhạc. Video vẫn xem và xuất được, chỉ là không có tiếng.</p>
-
-            {/* 1. Khung Trạng thái nhạc */}
-            <div className="panel" id="audioStatusBox" style={{ padding: '12px', display: 'grid', gap: '8px', background: 'var(--panel2)', border: '1px solid var(--line)', borderRadius: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                <span className="lbl" style={{ fontWeight: 700, color: 'var(--fg)', fontSize: '12px' }}>Trạng thái nhạc</span>
-                <span id="astCtxBadge" className="badge neutral">AudioContext: Chưa tạo</span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '85px minmax(0, 1fr)', gap: '4px 8px', fontSize: '12px', fontFamily: 'var(--font-mono)' }}>
-                <span style={{ color: 'var(--muted)' }}>File:</span>
-                <span id="astName" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>Chưa chọn</span>
-
-                <span style={{ color: 'var(--muted)' }}>Độ dài:</span>
-                <span id="astDur">00:00.00</span>
-
-                <span style={{ color: 'var(--muted)' }}>Tải file:</span>
-                <span id="astLoad">Chưa tải</span>
-
-                <span style={{ color: 'var(--muted)' }}>AudioCtx:</span>
-                <span id="astCtx">chưa khởi tạo</span>
-
-                <span style={{ color: 'var(--muted)' }}>Lỗi:</span>
-                <span id="astError" style={{ color: 'var(--accent)', wordBreak: 'break-word', fontWeight: 500 }}>Không có lỗi</span>
-              </div>
-              <div className="btns" style={{ marginTop: '4px' }}>
-                <button className="btn sm pri" id="btnResumeCtx" type="button">Kích hoạt âm thanh (Resume)</button>
-                <button className="btn sm" id="btnReloadAudio" type="button">Tải lại nhạc</button>
-              </div>
+              <button className="btn" id="applyAll" type="button">Áp dụng cho mọi clip</button>
             </div>
 
-            {/* 2. Cắt nhạc nhanh & Khung hướng dẫn Timeline */}
-            <div className="panel" style={{ padding: '10px 12px', display: 'grid', gap: '8px', background: 'var(--panel2)', border: '1px solid var(--line)', borderRadius: '8px' }}>
-              <span className="lbl" style={{ fontWeight: 700, color: 'var(--fg)', fontSize: '12px' }}>Cắt nhạc trên Timeline</span>
-              <p className="note" style={{ margin: 0, fontSize: '11.5px' }}>
-                💡 <strong>Kéo tay nắm hai đầu</strong> khối nhạc trên Timeline để cắt. Bấm <strong>✂️ Tách (phím S)</strong> tại đầu phát, hoặc <strong>🗑️ Xóa (phím Del)</strong>.
-              </p>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                <span style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Cắt nhanh:</span>
-                <button className="btn sm" id="btnPreset30" type="button">30s (Reels/TikTok)</button>
-                <button className="btn sm" id="btnPreset60" type="button">60s (Shorts)</button>
-                <button className="btn sm" id="btnPresetAll" type="button">Toàn bài</button>
-              </div>
-            </div>
+            {/* TAB NHẠC */}
+            <div className="tabpane" data-pane="music" hidden>
+              <label className="drop" htmlFor="fileAudio">
+                <strong>Chọn file nhạc của bạn</strong>
+                <span>Hỗ trợ MP3, M4A, WAV, OGG</span>
+              </label>
+              <input id="fileAudio" type="file" accept="audio/*" hidden />
+              <p className="note" id="audioInfo">Chưa có nhạc. Video vẫn xem và xuất được bình thường.</p>
 
-            {/* 3. Hiệu ứng Fade & Âm lượng */}
-            <div className="panel" style={{ padding: '10px 12px', display: 'grid', gap: '8px', background: 'var(--panel2)', border: '1px solid var(--line)', borderRadius: '8px' }}>
-              <span className="lbl" style={{ fontWeight: 700, color: 'var(--fg)', fontSize: '12px' }}>Fade & Âm lượng</span>
+              <div className="field" id="audioStatusBox" style={{ padding: '10px', background: 'var(--panel2)', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span className="lbl" style={{ margin: 0 }}>Trạng thái âm thanh</span>
+                  <span id="astCtxBadge" className="badge neutral">AudioContext</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '3px 6px', fontSize: '11.5px', fontFamily: 'var(--font-mono)' }}>
+                  <span style={{ color: 'var(--muted)' }}>File:</span>
+                  <span id="astName" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Chưa chọn</span>
+                  <span style={{ color: 'var(--muted)' }}>Độ dài:</span>
+                  <span id="astDur">00:00.00</span>
+                  <span style={{ color: 'var(--muted)' }}>AudioCtx:</span>
+                  <span id="astCtx">chưa chạy</span>
+                  <span style={{ color: 'var(--muted)' }}>Lỗi:</span>
+                  <span id="astError" style={{ color: 'var(--danger)', wordBreak: 'break-word' }}>Không có lỗi</span>
+                </div>
+                <div className="btns" style={{ marginTop: '8px' }}>
+                  <button className="btn sm pri" id="btnResumeCtx" type="button">Kích hoạt âm thanh</button>
+                  <button className="btn sm" id="btnReloadAudio" type="button">Tải lại nhạc</button>
+                </div>
+              </div>
+
+              <div className="field">
+                <label>Cắt nhanh theo thời lượng</label>
+                <div className="btns">
+                  <button className="btn sm" id="btnPreset30" type="button">30s (TikTok/Reels)</button>
+                  <button className="btn sm" id="btnPreset60" type="button">60s (Shorts)</button>
+                  <button className="btn sm" id="btnPresetAll" type="button">Toàn bài</button>
+                </div>
+              </div>
+
               <div className="row2">
                 <div className="field">
                   <label htmlFor="aFadeIn">Fade vào (giây)</label>
@@ -152,118 +233,164 @@ export default function App() {
                 </div>
               </div>
 
-              {/* VU Meter */}
-              <div style={{ display: 'grid', gap: '4px', marginTop: '2px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span className="lbl" style={{ fontSize: '11.5px' }}>Mức âm thanh (VU Meter)</span>
-                  <span id="vuVal" style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--muted)' }}>0% (Yên lặng)</span>
-                </div>
-                <div className="vu-bar">
-                  <div id="vuFill" className="vu-fill"></div>
-                  <div className="vu-scale">
-                    <span>-40dB</span>
-                    <span>-20dB</span>
-                    <span>-6dB</span>
-                    <span>0dB</span>
-                  </div>
-                </div>
-              </div>
-
               <div className="field">
                 <label htmlFor="aVol">Âm lượng tổng</label>
                 <input id="aVol" type="range" min="0" max="1" step="0.01" defaultValue="1" />
               </div>
+
+              <div style={{ padding: '10px', background: 'var(--accent-subtle)', border: '1px solid var(--accent)', borderRadius: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ fontWeight: 700, fontSize: '11.5px', color: 'var(--fg)' }}>✂️ Xuất âm thanh đã chỉnh</span>
+                  <span id="exportAudioStatus" style={{ fontSize: '10.5px', color: 'var(--muted)' }}>WAV / MP3</span>
+                </div>
+                <div className="btns">
+                  <button className="btn sm pri" id="btnExportTrimWav" type="button">⬇ Xuất WAV</button>
+                  <button className="btn sm" id="btnExportTrimMp3" type="button">⬇ Xuất MP3</button>
+                </div>
+              </div>
+
+              <div className="btns">
+                <button className="btn sm" id="fitMusic" type="button">Chia đều ảnh theo nhạc</button>
+                <button className="btn sm danger" id="rmAudio" type="button">Bỏ nhạc</button>
+              </div>
             </div>
 
-            {/* 4. Cài đặt hiệu ứng sóng nhạc trên video (tích hợp) */}
-            <div className="panel" style={{ padding: '12px', display: 'grid', gap: '10px', background: 'var(--panel2)', border: '1px solid var(--line)', borderRadius: '8px' }}>
-              <span className="lbl" style={{ fontWeight: 700, color: 'var(--fg)', fontSize: '12px' }}>Hiệu ứng sóng nhạc trên video</span>
+            {/* TAB SÓNG NHẠC */}
+            <div className="tabpane" data-pane="visual" hidden>
               <div className="field">
-                <label htmlFor="vizType">Kiểu hiệu ứng</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label>13 Mẫu sóng nhạc (1-Click)</label>
+                  <span style={{ fontSize: '10.5px', color: 'var(--accent)' }}>Sắc nét</span>
+                </div>
+                <div className="viz-preset-grid">
+                  <button type="button" className="viz-preset-btn active-preset" data-preset-key="tiktok" data-preset-type="bars">
+                    <span className="viz-icon">📊</span>
+                    <span className="viz-name">TikTok Viral</span>
+                    <span className="viz-sub">Equalizer</span>
+                  </button>
+                  <button type="button" className="viz-preset-btn" data-preset-key="lofi" data-preset-type="ribbon">
+                    <span className="viz-icon">✨</span>
+                    <span className="viz-name">Lofi Chill</span>
+                    <span className="viz-sub">Dải lụa</span>
+                  </button>
+                  <button type="button" className="viz-preset-btn" data-preset-key="vinyl" data-preset-type="circle">
+                    <span className="viz-icon">💿</span>
+                    <span className="viz-name">Đĩa Than</span>
+                    <span className="viz-sub">Sóng tròn</span>
+                  </button>
+                  <button type="button" className="viz-preset-btn" data-preset-key="ecg" data-preset-type="ecg">
+                    <span className="viz-icon">💓</span>
+                    <span className="viz-name">Nhịp Tim</span>
+                    <span className="viz-sub">Laser ECG</span>
+                  </button>
+                  <button type="button" className="viz-preset-btn" data-preset-key="edm" data-preset-type="ring">
+                    <span className="viz-icon">⚡</span>
+                    <span className="viz-name">EDM Ring</span>
+                    <span className="viz-sub">Xung kích</span>
+                  </button>
+                  <button type="button" className="viz-preset-btn" data-preset-key="stereo" data-preset-type="stereo">
+                    <span className="viz-icon">↔️</span>
+                    <span className="viz-name">Stereo 2 Bên</span>
+                    <span className="viz-sub">Hai mép</span>
+                  </button>
+                  <button type="button" className="viz-preset-btn" data-preset-key="cyber" data-preset-type="polygon">
+                    <span className="viz-icon">⬢</span>
+                    <span className="viz-name">Lục Giác</span>
+                    <span className="viz-sub">Cyber Core</span>
+                  </button>
+                  <button type="button" className="viz-preset-btn" data-preset-key="led" data-preset-type="dots">
+                    <span className="viz-icon">🎛️</span>
+                    <span className="viz-name">Ma Trận LED</span>
+                    <span className="viz-sub">Retro dots</span>
+                  </button>
+                  <button type="button" className="viz-preset-btn" data-preset-key="flame" data-preset-type="flame">
+                    <span className="viz-icon">🔥</span>
+                    <span className="viz-name">Ngọn Lửa</span>
+                    <span className="viz-sub">Spikes</span>
+                  </button>
+                  <button type="button" className="viz-preset-btn" data-preset-key="mountain" data-preset-type="mountain">
+                    <span className="viz-icon">⛰️</span>
+                    <span className="viz-name">Dãy Núi 3D</span>
+                    <span className="viz-sub">Synthwave</span>
+                  </button>
+                  <button type="button" className="viz-preset-btn" data-preset-key="blob" data-preset-type="blob">
+                    <span className="viz-icon">💧</span>
+                    <span className="viz-name">Giọt Nước</span>
+                    <span className="viz-sub">Liquid</span>
+                  </button>
+                  <button type="button" className="viz-preset-btn" data-preset-key="mirror" data-preset-type="mirror">
+                    <span className="viz-icon">🪞</span>
+                    <span className="viz-name">Đối Xứng</span>
+                    <span className="viz-sub">Gương lật</span>
+                  </button>
+                  <button type="button" className="viz-preset-btn" data-preset-key="wave" data-preset-type="wave">
+                    <span className="viz-icon">〰️</span>
+                    <span className="viz-name">Sóng Biển</span>
+                    <span className="viz-sub">Oscilloscope</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor="vizType">Kiểu sóng âm</label>
                 <select id="vizType" defaultValue="bars">
-                  <option value="bars">Thanh Equalizer (cột đứng)</option>
-                  <option value="mirror">Thanh Equalizer (đối xứng)</option>
-                  <option value="circle">Sóng tròn quanh logo</option>
-                  <option value="wave">Vạch sóng âm chạy ngang</option>
-                  <option value="none">Tắt hiệu ứng</option>
+                  <option value="bars">📊 Thanh Equalizer (Cột đứng + Hạt đỉnh)</option>
+                  <option value="mirror">🪞 Thanh Equalizer đối xứng (Gương lật)</option>
+                  <option value="circle">💿 Sóng tròn 360° đĩa than / Avatar</option>
+                  <option value="wave">〰️ Vạch sóng âm chạy ngang</option>
+                  <option value="dots">🎛️ Ma trận bóng LED xếp tầng</option>
+                  <option value="ribbon">✨ Dải lụa Neon uốn lượn</option>
+                  <option value="ring">⚡ Sóng xung kích tỏa tròn</option>
+                  <option value="ecg">💓 Nhịp đập tim Laser</option>
+                  <option value="polygon">⬢ Lục giác năng lượng Cyber</option>
+                  <option value="stereo">↔️ Thanh sóng 2 bên mép màn hình</option>
+                  <option value="flame">🔥 Ngọn lửa Cyber Spikes</option>
+                  <option value="blob">💧 Giọt nước âm thanh Liquid</option>
+                  <option value="mountain">⛰️ Rặng núi 3D Synthwave</option>
+                  <option value="none">❌ Tắt sóng nhạc</option>
                 </select>
               </div>
 
-              {/* Khung cấu hình Logo cho sóng tròn */}
-              <div className="panel" id="vizLogoBox" style={{ padding: '10px', display: 'grid', gap: '8px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: '8px' }} hidden>
-                <span className="lbl" style={{ fontWeight: 700, color: 'var(--fg)', fontSize: '12px' }}>Logo tâm sóng tròn</span>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                  <div id="vizLogoPreview" style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#0a0e0f', border: '2px solid var(--accent)', display: 'grid', placeItems: 'center', overflow: 'hidden', flexShrink: 0 }}>
-                    <span id="vizLogoIcon" style={{ fontSize: '18px' }}>🎵</span>
-                    <img id="vizLogoImgTag" alt="Logo preview" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'none' }} />
-                  </div>
-                  <div style={{ display: 'grid', gap: '4px', flex: 1 }}>
-                    <label className="btn sm" htmlFor="vizLogoFile" style={{ cursor: 'pointer', textAlign: 'center' }}>
-                      Tải ảnh logo / avatar
-                    </label>
-                    <input id="vizLogoFile" type="file" accept="image/*" hidden />
-                    <button className="btn sm" id="vizLogoClear" type="button">Dùng đĩa than mặc định</button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="row2">
-                <div className="field">
-                  <label htmlFor="vizColorMode">Kiểu màu</label>
-                  <select id="vizColorMode" defaultValue="gradient">
-                    <option value="gradient">Chuyển sắc (Gradient)</option>
-                    <option value="solid">Đơn sắc (1 màu)</option>
-                    <option value="rainbow">Cầu vồng</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="vizBars">Số vạch sóng</label>
-                  <select id="vizBars" defaultValue="32">
-                    <option value="16">16 vạch</option>
-                    <option value="24">24 vạch</option>
-                    <option value="32">32 vạch (chuẩn)</option>
-                    <option value="48">48 vạch</option>
-                    <option value="64">64 vạch</option>
-                  </select>
+              <div className="field" id="vizLogoBox" hidden>
+                <label>Logo / Avatar đĩa than</label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <img id="vizLogoImgTag" alt="Logo preview" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', display: 'none' }} />
+                  <span id="vizLogoIcon" style={{ fontSize: '20px' }}>🎵</span>
+                  <label className="btn sm" htmlFor="vizLogoFile" style={{ cursor: 'pointer' }}>Tải ảnh logo</label>
+                  <input id="vizLogoFile" type="file" accept="image/*" hidden />
+                  <button className="btn sm" id="vizLogoClear" type="button">Mặc định</button>
                 </div>
               </div>
 
               <div className="row2">
                 <div className="field">
                   <label htmlFor="vizColor">Màu chính</label>
-                  <input id="vizColor" type="color" defaultValue="#00f0ff" />
+                  <input id="vizColor" type="color" defaultValue="#14b8a6" />
                 </div>
                 <div className="field" id="vizColor2Box">
                   <label htmlFor="vizColor2">Màu phụ / Gradient</label>
-                  <input id="vizColor2" type="color" defaultValue="#ff007f" />
+                  <input id="vizColor2" type="color" defaultValue="#00f0ff" />
                 </div>
               </div>
 
               <div className="row2">
                 <div className="field">
-                  <label htmlFor="vizY">Vị trí dọc Y: <span id="vizYLbl" style={{ fontFamily: 'var(--font-mono)' }}>82%</span></label>
+                  <label htmlFor="vizY">Vị trí Y: <span id="vizYLbl">82%</span></label>
                   <input id="vizY" type="range" min="10" max="90" step="1" defaultValue="82" />
                 </div>
                 <div className="field">
-                  <label htmlFor="vizX">Vị trí ngang X: <span id="vizXLbl" style={{ fontFamily: 'var(--font-mono)' }}>50%</span></label>
+                  <label htmlFor="vizX">Vị trí X: <span id="vizXLbl">50%</span></label>
                   <input id="vizX" type="range" min="10" max="90" step="1" defaultValue="50" />
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Vị trí nhanh:</span>
-                <button className="btn sm" id="btnVizPosBottom" type="button">Đáy (82%)</button>
-                <button className="btn sm" id="btnVizPosCenter" type="button">Giữa (50%)</button>
-                <button className="btn sm" id="btnVizPosTop" type="button">Đỉnh (20%)</button>
-              </div>
-
               <div className="row2">
                 <div className="field">
-                  <label htmlFor="vizSize">Độ lớn: <span id="vizSizeLbl" style={{ fontFamily: 'var(--font-mono)' }}>1.0x</span></label>
+                  <label htmlFor="vizSize">Độ lớn: <span id="vizSizeLbl">1.0x</span></label>
                   <input id="vizSize" type="range" min="0.3" max="2.5" step="0.05" defaultValue="1" />
                 </div>
                 <div className="field">
-                  <label htmlFor="vizSens">Độ nhạy: <span id="vizSensLbl" style={{ fontFamily: 'var(--font-mono)' }}>1.2x</span></label>
+                  <label htmlFor="vizSens">Độ nhạy Bass: <span id="vizSensLbl">1.2x</span></label>
                   <input id="vizSens" type="range" min="0.4" max="3.0" step="0.1" defaultValue="1.2" />
                 </div>
               </div>
@@ -273,610 +400,577 @@ export default function App() {
               </label>
             </div>
 
-            {/* 5. Xuất nhạc đã cắt */}
-            <div style={{
-              padding: '10px 12px',
-              background: 'rgba(45, 212, 191, 0.08)',
-              border: '1px solid rgba(45, 212, 191, 0.28)',
-              borderRadius: '8px',
-              display: 'grid',
-              gap: '6px'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-                <span style={{ fontWeight: 600, fontSize: '12px', color: 'var(--text)' }}>
-                  ✂️ Xuất file nhạc đã cắt
-                </span>
-                <span id="exportAudioStatus" style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                  Đoạn chọn + Âm lượng + Fade
-                </span>
+            {/* TAB LYRIC */}
+            <div className="tabpane" data-pane="lyric" hidden>
+              <div className="lyr-stepper" role="tablist">
+                <button type="button" className="lyr-step-btn active" id="btnLyrStep1" data-step="1">1. Nhập lời</button>
+                <button type="button" className="lyr-step-btn" id="btnLyrStep2" data-step="2">2. Căn giờ</button>
+                <button type="button" className="lyr-step-btn" id="btnLyrStep3" data-step="3">3. Chỉnh sửa</button>
               </div>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
-                <button className="btn sm pri" id="btnExportTrimWav" type="button" style={{ flex: '1 1 120px' }}>
-                  ⬇ Xuất WAV
-                </button>
-                <button className="btn sm" id="btnExportTrimMp3" type="button" style={{ flex: '1 1 120px' }}>
-                  ⬇ Xuất MP3
-                </button>
+
+              <div id="lyrStep1Pane" style={{ display: 'grid', gap: '8px' }}>
+                <div className="field">
+                  <label htmlFor="lyrRawInput">Dán lời bài hát (mỗi dòng một câu)</label>
+                  <textarea id="lyrRawInput" rows={7} placeholder="Hoa nở bên tường ai ngóng trông..."></textarea>
+                </div>
+                <div className="btns">
+                  <button className="btn pri" id="btnParseLyrics" type="button" style={{ flex: 1 }}>⚡ Tạo danh sách câu</button>
+                  <label className="btn" htmlFor="fileLrc" style={{ cursor: 'pointer' }}>📁 File .lrc / .srt</label>
+                  <input id="fileLrc" type="file" accept=".lrc,.srt,.txt,text/plain" hidden />
+                </div>
               </div>
-            </div>
 
-            <div className="btns">
-              <button className="btn" id="fitMusic">Chia đều ảnh theo nhạc</button>
-              <button className="btn danger" id="rmAudio">Bỏ nhạc</button>
-            </div>
-          </div>
+              <div id="lyrStep2Pane" style={{ display: 'none', gap: '10px' }}>
+                <div className="lyr-tap-stage">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span id="lyrTapCounter" className="badge success">Câu 1 / 1</span>
+                    <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Phím <strong>Space</strong></span>
+                  </div>
+                  <div id="lyrTapPrev" style={{ fontSize: '11px', color: 'var(--muted)' }}>(Bắt đầu từ câu đầu tiên)</div>
+                  <div id="lyrTapCurrent" className="lyr-tap-current">(Chưa có lời. Nhập lời ở Bước 1)</div>
+                  <div id="lyrTapNext" style={{ fontSize: '11px', color: 'var(--muted)' }}></div>
+                  <button className="btn pri" id="btnTapMarkNow" type="button" style={{ padding: '12px', fontSize: '14px', fontWeight: 700 }}>
+                    ⚡ Bắt đầu câu này (Phím Space)
+                  </button>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px' }}>
+                  <button className="btn sm" id="btnTapUndoLine" type="button">↩ Hoàn tác</button>
+                  <button className="btn sm" id="btnTapSkipLine" type="button">⏩ Bỏ qua</button>
+                  <button className="btn sm pri" id="btnTapGoStep3" type="button">Bước 3 ➔</button>
+                </div>
+              </div>
 
-          <div className="tabpane" data-pane="lyric" hidden>
-            {/* Thanh điều hướng 3 Bước (Stepper) */}
-            <div className="lyr-stepper" role="tablist" aria-label="Các bước cài đặt Lyric">
-              <button type="button" className="lyr-step-btn active" id="btnLyrStep1" data-step="1">
-                <span className="step-num">1</span>
-                <span className="step-title">Nhập lời</span>
-              </button>
-              <button type="button" className="lyr-step-btn" id="btnLyrStep2" data-step="2">
-                <span className="step-num">2</span>
-                <span className="step-title">Căn giờ</span>
-              </button>
-              <button type="button" className="lyr-step-btn" id="btnLyrStep3" data-step="3">
-                <span className="step-num">3</span>
-                <span className="step-title">Chỉnh sửa</span>
-              </button>
-            </div>
-
-            {/* BƯỚC 1: NHẬP LỜI */}
-            <div id="lyrStep1Pane" className="lyr-step-content" style={{ display: 'grid', gap: '10px' }}>
-              <div className="field">
+              <div id="lyrStep3Pane" style={{ display: 'none', gap: '8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label htmlFor="lyrRawInput" style={{ fontWeight: 700 }}>Dán lời bài hát thường (mỗi dòng một câu)</label>
-                  <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Không cần gõ số giây</span>
-                </div>
-                <textarea
-                  id="lyrRawInput"
-                  rows={8}
-                  spellCheck={false}
-                  placeholder={'Dán lời bài hát vào đây, mỗi dòng là một câu.\nVí dụ:\nÁnh đèn vàng soi bóng em\nBước chân nhẹ trong đêm dài\nNỗi nhớ này biết gửi về đâu...'}
-                  style={{ width: '100%', resize: 'vertical', lineHeight: '1.5', fontSize: '13px' }}
-                ></textarea>
-              </div>
-
-              <div className="btns" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button className="btn pri" id="btnParseLyrics" type="button" style={{ flex: 1, minWidth: '160px' }}>
-                  ⚡ Tạo danh sách câu
-                </button>
-                <label className="btn" htmlFor="fileLrc" style={{ cursor: 'pointer', whiteSpace: 'nowrap' }} title="Nhập file lời có sẵn mốc giờ">
-                  📁 Nhập file .lrc / .srt
-                </label>
-                <input id="fileLrc" type="file" accept=".lrc,.srt,.txt,text/plain" hidden />
-              </div>
-
-              <p className="note" style={{ margin: 0, fontSize: '11.5px' }}>
-                💡 <strong>Gợi ý:</strong> Bạn có thể quay lại sửa lời bất cứ lúc nào. Hệ thống tự động so khớp theo vị trí dòng để giữ nguyên mốc giờ của các câu đã căn trước đó.
-              </p>
-            </div>
-
-            {/* BƯỚC 2: CĂN GIỜ (TAP-TO-SYNC) */}
-            <div id="lyrStep2Pane" className="lyr-step-content" style={{ display: 'none', gap: '12px' }}>
-              <div className="lyr-tap-stage">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px' }}>
-                  <span id="lyrTapCounter" className="badge success" style={{ fontSize: '11.5px', padding: '3px 8px' }}>
-                    Câu 1 / 1
-                  </span>
-                  <span style={{ color: 'var(--muted)' }}>Phím tắt: <strong>Space</strong> (Bắt đầu câu)</span>
-                </div>
-
-                {/* Câu trước mờ đi */}
-                <div id="lyrTapPrev" className="lyr-tap-prev">
-                  (Bắt đầu từ câu đầu tiên)
-                </div>
-
-                {/* Câu kế tiếp rất to, nổi bật */}
-                <div id="lyrTapCurrent" className="lyr-tap-current">
-                  (Chưa có lời bài hát. Hãy nhập lời ở Bước 1)
-                </div>
-
-                {/* Câu sau nữa xem trước */}
-                <div id="lyrTapNext" className="lyr-tap-next"></div>
-
-                {/* Nút to để bắt nhịp */}
-                <button
-                  className="btn pri"
-                  id="btnTapMarkNow"
-                  type="button"
-                  style={{
-                    padding: '14px',
-                    fontSize: '15px',
-                    fontWeight: 700,
-                    letterSpacing: '0.02em',
-                    boxShadow: '0 4px 16px color-mix(in srgb,var(--accent) 35%,transparent)'
-                  }}
-                >
-                  ⚡ Bắt đầu câu này (Phím Space)
-                </button>
-              </div>
-
-              {/* Điều khiển hỗ trợ bắt nhịp */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Tốc độ:</span>
-                  <div className="seg" role="group" aria-label="Tốc độ căn giờ">
-                    <button type="button" id="btnTapSpeed075" data-speed="0.75" style={{ padding: '3px 8px', fontSize: '12px' }}>0.75x</button>
-                    <button type="button" id="btnTapSpeed1" data-speed="1.0" aria-pressed="true" style={{ padding: '3px 8px', fontSize: '12px' }}>1x</button>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button className="btn sm" id="btnTapUndoLine" type="button" title="Hoàn tác câu vừa bấm và lùi nhạc 3s (Ctrl+Z)">
-                    ↩ Hoàn tác lần bấm cuối
-                  </button>
-                  <button className="btn sm" id="btnTapSkipLine" type="button" title="Bỏ qua không căn câu này">
-                    ⏩ Bỏ qua
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '4px', borderTop: '1px solid var(--line)' }}>
-                <button className="btn sm pri" id="btnTapGoStep3" type="button">
-                  Chuyển sang Bước 3 (Chỉnh sửa) ➔
-                </button>
-              </div>
-            </div>
-
-            {/* BƯỚC 3: CHỈNH SỬA (DANH SÁCH THẺ) */}
-            <div id="lyrStep3Pane" className="lyr-step-content" style={{ display: 'none', gap: '10px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                <button className="btn sm pri" id="btnCardAddAtHead" type="button" title="Thêm câu mới ngay vị trí đầu phát hiện tại">
-                  ➕ Thêm câu tại đầu phát
-                </button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button className="btn sm pri" id="btnCardAddAtHead" type="button">➕ Thêm câu tại đầu phát</button>
                   <span id="lyrCardsTotalBadge" className="badge neutral">0 câu</span>
-                  <button className="btn sm" id="btnBackToStep2" type="button" title="Quay lại căn giờ tự động">
-                    🎙️ Căn lại giờ
-                  </button>
+                  <button className="btn sm" id="btnBackToStep2" type="button">🎙️ Căn lại giờ</button>
                 </div>
+                <div className="lyr-cards-list" id="lyrCardsList"></div>
+                <button className="btn sm danger" id="lyrClearAllTimes" type="button" style={{ marginTop: '6px' }}>🗑️ Xóa toàn bộ giờ</button>
               </div>
 
-              {/* Danh sách thẻ cuộn */}
-              <div className="lyr-cards-list" id="lyrCardsList">
-                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--muted)', fontSize: '12.5px' }}>
-                  Chưa có danh sách câu. Hãy nhập lời ở <strong>Bước 1</strong>.
-                </div>
-              </div>
-
-              {/* Mục Nâng cao (thu gọn mặc định) */}
-              <details className="panel" style={{ padding: '8px 10px', background: 'var(--panel2)', border: '1px solid var(--line)', borderRadius: '6px' }}>
-                <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '12px', color: 'var(--fg)', userSelect: 'none' }}>
-                  ⚙️ Nâng cao (Dịch giờ, Xóa giờ...)
-                </summary>
-                <div style={{ display: 'grid', gap: '10px', marginTop: '10px' }}>
-                  <div className="row2">
-                    <div className="field">
-                      <label htmlFor="shiftV">Dịch tất cả giờ (giây)</label>
-                      <input id="shiftV" type="number" step="0.1" defaultValue="0.3" />
-                    </div>
-                    <div className="field">
-                      <label>&nbsp;</label>
-                      <div className="btns">
-                        <button className="btn sm" id="shiftMinus" type="button">Sớm lại (-)</button>
-                        <button className="btn sm" id="shiftPlus" type="button">Trễ ra (+)</button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <button className="btn sm danger" id="lyrClearAllTimes" type="button" title="Xóa hết giờ, đưa về chưa căn">
-                      🗑️ Xóa toàn bộ giờ (giữ nguyên chữ)
-                    </button>
-                  </div>
-                </div>
-              </details>
+              <textarea id="lyr" style={{ display: 'none' }}></textarea>
             </div>
 
-            {/* Input ẩn để tương thích code & xuất text chuẩn */}
-            <textarea id="lyr" style={{ display: 'none' }}></textarea>
-          </div>
-
-          <div className="tabpane" data-pane="text" hidden>
-            <div className="field">
-              <label htmlFor="sFont">Font chữ</label>
-              <select id="sFont"></select>
-            </div>
-            <div className="btns">
-              <label className="btn sm" htmlFor="fileFont" style={{ cursor: 'pointer' }}>
-                Tải font của bạn (.ttf .otf .woff)
-              </label>
-              <input id="fileFont" type="file" accept=".ttf,.otf,.woff,.woff2" hidden />
-            </div>
-            <div className="row2">
+            {/* TAB CHỮ */}
+            <div className="tabpane" data-pane="text" hidden>
               <div className="field">
-                <label htmlFor="sSize">Cỡ chữ</label>
-                <input id="sSize" type="range" min="3" max="14" step="0.2" defaultValue="7" />
+                <label htmlFor="sFont">Font chữ</label>
+                <select id="sFont"></select>
+              </div>
+              <div className="row2">
+                <div className="field">
+                  <label htmlFor="sSize">Cỡ chữ</label>
+                  <input id="sSize" type="range" min="3" max="14" step="0.2" defaultValue="7" />
+                </div>
+                <div className="field">
+                  <label htmlFor="sWeight">Độ đậm</label>
+                  <select id="sWeight" defaultValue="700">
+                    <option value="400">Thường</option>
+                    <option value="700">Đậm</option>
+                    <option value="800">Rất đậm</option>
+                  </select>
+                </div>
+              </div>
+              <div className="row3">
+                <div className="field">
+                  <label htmlFor="sColor">Màu chữ</label>
+                  <input id="sColor" type="color" defaultValue="#ffffff" />
+                </div>
+                <div className="field">
+                  <label htmlFor="sHi">Màu chạy</label>
+                  <input id="sHi" type="color" defaultValue="#ffd23f" />
+                </div>
+                <div className="field">
+                  <label htmlFor="sOutC">Màu viền</label>
+                  <input id="sOutC" type="color" defaultValue="#000000" />
+                </div>
               </div>
               <div className="field">
-                <label htmlFor="sWeight">Độ đậm</label>
-                <select id="sWeight" defaultValue="700">
-                  <option value="400">Thường</option>
-                  <option value="700">Đậm</option>
-                  <option value="800">Rất đậm</option>
+                <label htmlFor="sY">Vị trí dọc của lời</label>
+                <input id="sY" type="range" min="8" max="92" step="1" defaultValue="74" />
+              </div>
+              <div className="field">
+                <label htmlFor="sAnim">Hiệu ứng chữ</label>
+                <select id="sAnim" defaultValue="fade">
+                  <option value="fade">Mờ dần</option>
+                  <option value="rise">Bay lên</option>
+                  <option value="pop">Nảy (pop)</option>
+                  <option value="type">Gõ từng chữ</option>
+                  <option value="slide">Trượt từ trái</option>
                 </select>
               </div>
-            </div>
-            <div className="row3">
+              <label className="chk">
+                <input id="sKara" type="checkbox" defaultChecked /> Chữ đổi màu chạy theo nhạc (karaoke)
+              </label>
+              <label className="chk">
+                <input id="sNext" type="checkbox" defaultChecked /> Hiện thêm dòng kế tiếp bên dưới
+              </label>
+              <label className="chk">
+                <input id="sShadow" type="checkbox" defaultChecked /> Đổ bóng
+              </label>
               <div className="field">
-                <label htmlFor="sColor">Màu chữ</label>
-                <input id="sColor" type="color" defaultValue="#ffffff" />
+                <label htmlFor="tText">Tiêu đề đầu video</label>
+                <input id="tText" type="text" placeholder="Ví dụ: Hoa nở bên tường - Ca sĩ" />
               </div>
-              <div className="field">
-                <label htmlFor="sHi">Màu chạy</label>
-                <input id="sHi" type="color" defaultValue="#ffd23f" />
-              </div>
-              <div className="field">
-                <label htmlFor="sOutC">Màu viền</label>
-                <input id="sOutC" type="color" defaultValue="#000000" />
-              </div>
-            </div>
-            <div className="row2">
-              <div className="field">
-                <label htmlFor="sOut">Độ dày viền</label>
-                <input id="sOut" type="range" min="0" max="14" step="0.5" defaultValue="6" />
-              </div>
-              <div className="field">
-                <label htmlFor="sBox">Nền mờ sau chữ</label>
-                <input id="sBox" type="range" min="0" max="0.85" step="0.05" defaultValue="0" />
-              </div>
-            </div>
-            <div className="field">
-              <label htmlFor="sY">Vị trí dọc của lời</label>
-              <input id="sY" type="range" min="8" max="92" step="1" defaultValue="74" />
-            </div>
-            <div className="field">
-              <label htmlFor="sAnim">Hiệu ứng chữ</label>
-              <select id="sAnim" defaultValue="fade">
-                <option value="fade">Mờ dần</option>
-                <option value="rise">Bay lên</option>
-                <option value="pop">Nảy (pop)</option>
-                <option value="type">Gõ từng chữ</option>
-                <option value="slide">Trượt từ trái</option>
-              </select>
-            </div>
-            <label className="chk">
-              <input id="sKara" type="checkbox" defaultChecked /> Chữ đổi màu chạy theo nhạc (karaoke)
-            </label>
-            <label className="chk">
-              <input id="sNext" type="checkbox" defaultChecked /> Hiện thêm dòng kế tiếp bên dưới
-            </label>
-            <label className="chk">
-              <input id="sShadow" type="checkbox" defaultChecked /> Đổ bóng
-            </label>
-            <label className="chk">
-              <input id="sUpper" type="checkbox" /> VIẾT HOA TOÀN BỘ
-            </label>
-            <div className="field">
-              <label htmlFor="tText">Tiêu đề đầu video (bỏ trống nếu không dùng)</label>
-              <input id="tText" type="text" placeholder="Ví dụ: Tên bài hát - Ca sĩ" />
-            </div>
-            <div className="field">
-              <label htmlFor="tDur">Tiêu đề hiện trong (giây)</label>
-              <input id="tDur" type="number" min="1" max="30" step="0.5" defaultValue="3" />
             </div>
           </div>
-        </section>
+        </aside>
 
-        <section className="stagecol" aria-label="Xem trước">
-          <div className="stage panel" id="stage">
-            <canvas id="cv" width="720" height="1280"></canvas>
+        {/* 4. PREVIEW TRUNG TÂM & THANH ĐIỀU KHIỂN PHÁT */}
+        <div className="studio-center">
+          <div className="stage-viewport">
+            <div className="stage" id="stage">
+              <canvas id="cv" width="720" height="1280"></canvas>
+            </div>
           </div>
-          <div className="panel transport">
-            <div className="transport-btns">
-              <button className="ib" id="bStart" type="button" aria-label="Về đầu" title="Về đầu">
-                <svg viewBox="0 0 24 24" width="15" height="15">
-                  <path d="M6 5h2v14H6zM20 5v14L9 12z" fill="currentColor" />
+
+          {/* THANH ĐIỀU KHIỂN PHÁT XẾP NGANG */}
+          <div className="studio-transport">
+            <div className="transport-btns-row">
+              <button type="button" className="transport-round-btn" id="bStart" title="Về đầu (00:00)">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+                  <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
                 </svg>
               </button>
-              <button className="ib pri" id="bPlay" type="button" aria-label="Phát" title="Phát / Tạm dừng (Phím Space)">
-                <svg viewBox="0 0 24 24" width="18" height="18"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+
+              <button type="button" className="transport-round-btn" id="bStepBack5" title="Lùi 5 giây">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4">
+                  <path d="M1 4v6h6M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                </svg>
               </button>
-              <button className="ib" id="bStop" type="button" aria-label="Dừng (về 00:00)" title="Dừng hẳn và về 00:00">
-                <svg viewBox="0 0 24 24" width="14" height="14">
-                  <rect x="5.5" y="5.5" width="13" height="13" rx="1.5" fill="currentColor" />
+
+              <button type="button" className="transport-round-btn play-btn" id="bPlay" title="Phát / Tạm dừng (Phím Space)" aria-label="Phát">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </button>
+
+              <button type="button" className="transport-round-btn" id="bStepFwd5" title="Tiến 5 giây">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4">
+                  <path d="M23 4v6h-6M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+              </button>
+
+              <button type="button" className="transport-round-btn" id="bStop" title="Dừng hẳn và về 00:00">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                  <rect x="5" y="5" width="14" height="14" rx="2" />
                 </svg>
               </button>
             </div>
-            <div className="transport-scrub">
-              <input id="scrub" type="range" min="0" max="0" step="0.01" defaultValue="0" aria-label="Tua" />
-              <span className="time" id="timeLbl">00:00.00 / 00:00.00</span>
-            </div>
-            <div className="vol-ctrl" title="Âm lượng (Phím M tắt/bật, Mũi tên lên/xuống chỉnh 5%)">
-              <button className="ib sm" id="bMute" type="button" aria-label="Tắt/Bật tiếng (M)" title="Tắt/Bật tiếng (Phím M)">
-                <svg viewBox="0 0 24 24" width="15" height="15">
-                  <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" fill="currentColor"/>
+
+            <span className="transport-timecode" id="timeLbl">00:00.00 / 00:04.00</span>
+            <input id="scrub" type="range" min="0" max="0" step="0.01" defaultValue="0" style={{ display: 'none' }} />
+
+            <div className="transport-vol-box" title="Âm lượng (Phím M tắt/bật)">
+              <button type="button" id="bMute" className="transport-round-btn" style={{ width: '26px', height: '26px', border: 'none', background: 'transparent' }} title="Tắt / Bật tiếng (Phím M)">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
                 </svg>
               </button>
-              <input id="stageVol" type="range" min="0" max="1" step="0.01" defaultValue="1" aria-label="Âm lượng phát" />
-              <span className="vol-val" id="stageVolLbl">100%</span>
+              <input id="stageVol" type="range" min="0" max="1" step="0.01" defaultValue="1" className="transport-vol-slider" aria-label="Âm lượng" />
+              <span id="stageVolLbl" className="transport-vol-percent">100%</span>
             </div>
-          </div>
-        </section>
-      </div>
 
-      <section className="panel tl-wrap" aria-label="Timeline">
-        <div className="tl-bar">
-          <div className="btns" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <button className="btn sm" id="btnTlUndo" type="button" title="Hoàn tác (Ctrl+Z)" disabled>
-              ↩ Hoàn tác
+            <button type="button" className="transport-round-btn" id="btnFullscreen" title="Toàn màn hình preview">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+              </svg>
             </button>
-            <button className="btn sm" id="btnTlRedo" type="button" title="Làm lại (Ctrl+Y)" disabled>
-              ↪ Làm lại
-            </button>
-            <label className="btn sm pri" htmlFor="fileMedia2" style={{ cursor: 'pointer' }} title="Thêm ảnh hoặc video">
-              + Thêm clip
-            </label>
-            <input id="fileMedia2" type="file" accept="image/*,video/*" multiple hidden />
-            <button className="btn sm" id="btnTlSplit" type="button" title="Cắt tách nhạc hoặc clip tại đầu phát (Phím S)">
-              ✂️ Tách (S)
-            </button>
-            <button className="btn sm danger" id="btnTlDelete" type="button" title="Xóa phần đang chọn (Phím Delete)">
-              🗑️ Xóa (Del)
-            </button>
-            <button className="btn sm" id="btnTlCloseGaps" type="button" title="Xóa khoảng trống, nối liền các đoạn nhạc">
-              ⚡ Nối khoảng trống
-            </button>
-            <div style={{ display: 'inline-flex', gap: '4px', alignItems: 'center', marginLeft: '2px', borderLeft: '1px solid var(--line)', paddingLeft: '6px' }}>
-              <button className="btn sm" id="btnTlPre30" type="button" title="Cắt nhanh 30s cho Reels / TikTok">30s</button>
-              <button className="btn sm" id="btnTlPre60" type="button" title="Cắt nhanh 60s cho Shorts">60s</button>
-              <button className="btn sm" id="btnTlPreAll" type="button" title="Lấy toàn bộ bài hát">Toàn bài</button>
-            </div>
-            {/* Fade in / fade out cho khối nhạc (0s, 1s, 2s, 3s) */}
-            <div style={{ display: 'inline-flex', gap: '4px', alignItems: 'center', borderLeft: '1px solid var(--line)', paddingLeft: '6px' }} title="Fade in / Fade out cho đoạn nhạc">
-              <span style={{ fontSize: '11px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Fade:</span>
-              <select id="tlFadeIn" title="Fade vào đầu bài (giây)" defaultValue="0" style={{ padding: '2px 4px', fontSize: '11px', height: '26px', background: 'var(--panel2)', border: '1px solid var(--line)', borderRadius: '4px', color: 'var(--fg)' }}>
-                <option value="0">Vào 0s</option>
-                <option value="1">Vào 1s</option>
-                <option value="2">Vào 2s</option>
-                <option value="3">Vào 3s</option>
-              </select>
-              <select id="tlFadeOut" title="Fade ra đuôi bài (giây)" defaultValue="1" style={{ padding: '2px 4px', fontSize: '11px', height: '26px', background: 'var(--panel2)', border: '1px solid var(--line)', borderRadius: '4px', color: 'var(--fg)' }}>
-                <option value="0">Ra 0s</option>
-                <option value="1">Ra 1s</option>
-                <option value="2">Ra 2s</option>
-                <option value="3">Ra 3s</option>
-              </select>
-            </div>
-            <button className="btn sm" id="tSplit" style={{ display: 'none' }}>Cắt tại đầu phát</button>
-          </div>
 
-          {/* Thanh công cụ chỉnh Lyric trên Timeline (Requirement 5) */}
-          <div id="lyrToolbar" className="lyr-toolbar" style={{ display: 'none', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            <span className="badge success" id="lyrTbBadge" style={{ fontSize: '11px', padding: '2px 7px' }}>Câu #1</span>
-            <button className="btn sm" id="btnTbAddLyr" type="button" title="Thêm câu mới tại đầu phát">➕ Thêm câu</button>
-            <button className="btn sm" id="btnTbSplitLyr" type="button" title="Tách câu tại đầu phát thành 2 câu">✂️ Tách câu</button>
-            <button className="btn sm" id="btnTbMergeNext" type="button" title="Gộp câu này với câu kế tiếp">🔗 Gộp sau</button>
-            <button className="btn sm danger" id="btnTbDelLyr" type="button" title="Xóa câu này">🗑️ Xóa</button>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px' }}>
-              <span style={{ color: 'var(--muted)' }}>Bắt đầu:</span>
-              <input type="number" id="lyrTbStart" step="0.05" min="0" style={{ width: '64px', padding: '3px 4px', fontSize: '11px', fontFamily: 'var(--font-mono)' }} />
-            </div>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px' }}>
-              <span style={{ color: 'var(--muted)' }}>Kết thúc:</span>
-              <input type="number" id="lyrTbEnd" step="0.05" min="0" style={{ width: '64px', padding: '3px 4px', fontSize: '11px', fontFamily: 'var(--font-mono)' }} />
-            </div>
-            <button className="btn sm" id="btnTbDeselect" type="button" title="Đóng bảng chỉnh câu" style={{ padding: '2px 6px', fontSize: '11px' }}>✕</button>
-          </div>
-
-          <div className="zoom" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <button className="btn sm" id="btnTlFitZoom" type="button" title="Thu phóng vừa toàn bộ timeline" style={{ padding: '2px 7px', fontSize: '11px', whiteSpace: 'nowrap' }}>
-              📐 Vừa khung
-            </button>
-            <input id="zoom" type="range" min="15" max="200" step="5" defaultValue="60" style={{ width: '75px' }} title="Thu phóng timeline" />
-            <button className="btn sm" id="btnKbShortcuts" type="button" title="Xem danh sách phím tắt (Keyboard shortcuts)" style={{ padding: '2px 6px', fontSize: '13px' }}>
-              ⌨️
+            <button type="button" className="transport-round-btn" id="btnToggleRightPanelTransport" title="Bật / Thu gọn bảng thuộc tính">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5-2h4V7h-4v10z"/>
+              </svg>
             </button>
           </div>
         </div>
-        <div className="tl-body">
-          <div className="tl-headers" aria-hidden="true">
-            <div style={{ height: '22px', borderBottom: '1px solid var(--line)' }}></div>
-            <div className="tl-header-lbl" style={{ top: '30px', height: '76px' }}>CLIP</div>
-            <div className="tl-header-lbl" style={{ top: '110px', height: '46px' }}>NHẠC</div>
-            <div className="tl-header-lbl" style={{ top: '160px', height: '32px' }}>LYRIC</div>
+
+        {/* 5. PANEL BÊN PHẢI THEO NGỮ CẢNH (CONTEXTUAL INSPECTOR 290px) */}
+        <aside className="studio-right-panel" id="studioRightPanel">
+          <div className="right-panel-header">
+            <div className="right-header-title-box">
+              <span className="right-header-icon" id="rightPanelIcon">⚙️</span>
+              <span className="right-header-title" id="rightPanelTitle">Cài đặt Dự án</span>
+            </div>
+            <button type="button" className="btn sm" id="btnToggleRightPanel" title="Thu gọn bảng thuộc tính" style={{ padding: '2px 8px' }}>
+              ✕
+            </button>
           </div>
-          <div className="tl-scroll" id="tlScroll" style={{ flex: 1, minWidth: 0 }}>
+
+          <div className="right-panel-content">
+            {/* NGỮ CẢNH 1: CLIP ĐANG CHỌN (ẢNH HOẶC VIDEO) */}
+            <div id="ctxClip" className="ctx-pane" hidden>
+              <div className="ctx-header-row">
+                <span className="badge" id="ctxClipBadge" style={{ background: 'var(--accent-subtle)', color: 'var(--accent)', border: '1px solid var(--accent)' }}>🖼️ Ảnh</span>
+                <span className="ctx-item-title" id="ctxClipName" style={{ fontWeight: 700, fontSize: '12.5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Tên clip</span>
+              </div>
+
+              <div className="field" id="gDur">
+                <label htmlFor="iDur">Thời lượng (giây)</label>
+                <input id="iDur" type="number" min="0.3" max="600" step="0.1" />
+              </div>
+
+              <div className="row2">
+                <div className="field" id="gIn" hidden>
+                  <label htmlFor="iIn">Cắt từ giây</label>
+                  <input id="iIn" type="number" min="0" step="0.1" />
+                </div>
+                <div className="field" id="gOut" hidden>
+                  <label htmlFor="iOut">Đến giây</label>
+                  <input id="iOut" type="number" min="0" step="0.1" />
+                </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor="iFit">Khung ảnh</label>
+                <select id="iFit" defaultValue="cover">
+                  <option value="cover">Phủ kín khung (Cover)</option>
+                  <option value="contain">Vừa ảnh, nền mờ (Contain)</option>
+                </select>
+              </div>
+
+              <div className="field">
+                <label htmlFor="iFx">Chuyển động (Ken Burns)</label>
+                <select id="iFx"></select>
+              </div>
+
+              <div className="field">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label htmlFor="iTr">Chuyển cảnh vào</label>
+                  <button type="button" className="btn sm" id="btnPreviewClipTr" style={{ padding: '1px 6px', fontSize: '11px' }}>▶ Xem</button>
+                </div>
+                <select id="iTr"></select>
+              </div>
+
+              <div className="field">
+                <label htmlFor="iTrD">Thời gian chuyển (giây)</label>
+                <input id="iTrD" type="number" min="0.1" max="3" step="0.1" />
+              </div>
+
+              <div className="field">
+                <label htmlFor="iCol">Bộ lọc màu</label>
+                <select id="iCol"></select>
+              </div>
+
+              <div className="field" style={{ marginTop: '4px' }}>
+                <button type="button" className="btn sm" id="btnApplyClipTrAll" style={{ width: '100%' }}>Áp dụng chuyển cảnh cho mọi clip</button>
+              </div>
+
+              <div className="btns" style={{ marginTop: '8px' }}>
+                <button className="btn sm" id="iL" type="button" title="Dời clip sang trái">◀ Dời trái</button>
+                <button className="btn sm" id="iR" type="button" title="Dời clip sang phải">Dời phải ▶</button>
+                <button className="btn sm" id="iDup" type="button" title="Nhân bản clip này">📋 Nhân bản</button>
+                <button className="btn sm danger" id="iDel" type="button" title="Xóa clip này">🗑️ Xóa</button>
+              </div>
+            </div>
+
+            {/* NGỮ CẢNH 2: KHỐI NHẠC ĐANG CHỌN */}
+            <div id="ctxAudio" className="ctx-pane" hidden>
+              <div className="ctx-header-row">
+                <span className="badge" style={{ background: 'rgba(14, 165, 233, 0.2)', color: '#38bdf8', border: '1px solid #38bdf8' }}>♫ Nhạc</span>
+                <span className="ctx-item-title" id="ctxAudioName" style={{ fontWeight: 700, fontSize: '12.5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Tên đoạn nhạc</span>
+              </div>
+
+              <div className="field">
+                <label htmlFor="aVol">Âm lượng đoạn nhạc</label>
+                <input id="aVol" type="range" min="0" max="1" step="0.01" defaultValue="1" />
+              </div>
+
+              <div className="row2">
+                <div className="field">
+                  <label htmlFor="aFadeIn">Fade vào (giây)</label>
+                  <input id="aFadeIn" type="number" min="0" max="10" step="0.1" defaultValue="0" />
+                </div>
+                <div className="field">
+                  <label htmlFor="aFadeOut">Fade ra (giây)</label>
+                  <input id="aFadeOut" type="number" min="0" max="10" step="0.1" defaultValue="1.5" />
+                </div>
+              </div>
+
+              <div className="field">
+                <label>Tốc độ phát</label>
+                <div className="speed-grid">
+                  <button type="button" className="speed-btn" data-speed="0.5">0.5x</button>
+                  <button type="button" className="speed-btn" data-speed="0.75">0.75x</button>
+                  <button type="button" className="speed-btn active" data-speed="1.0">1.0x</button>
+                  <button type="button" className="speed-btn" data-speed="1.25">1.25x</button>
+                  <button type="button" className="speed-btn" data-speed="1.5">1.5x</button>
+                  <button type="button" className="speed-btn" data-speed="2.0">2.0x</button>
+                </div>
+              </div>
+
+              <div className="btns" style={{ marginTop: '12px' }}>
+                <button className="btn sm" id="btnCtxCloseGaps" type="button">⚡ Nối khoảng trống</button>
+                <button className="btn sm danger" id="btnCtxDelAudio" type="button">🗑️ Xóa đoạn nhạc</button>
+              </div>
+            </div>
+
+            {/* NGỮ CẢNH 3: CÂU LYRIC ĐANG CHỌN */}
+            <div id="ctxLyric" className="ctx-pane" hidden>
+              <div className="ctx-header-row">
+                <span className="badge" id="inspLyrBadge" style={{ background: 'rgba(255, 210, 63, 0.2)', color: '#ffd23f', border: '1px solid #ffd23f' }}>📝 Câu #1</span>
+                <span className="ctx-item-title" id="inspLyrDurBadge" style={{ fontWeight: 700, fontSize: '12px', fontFamily: 'var(--font-mono)' }}>03.50s</span>
+              </div>
+
+              <div className="field">
+                <label htmlFor="inspLyrText">Nội dung câu</label>
+                <textarea id="inspLyrText" rows={3} style={{ width: '100%', resize: 'vertical' }}></textarea>
+              </div>
+
+              <div className="row2">
+                <div className="field">
+                  <label htmlFor="inspLyrStart">Giây bắt đầu</label>
+                  <input id="inspLyrStart" type="number" step="0.05" min="0" />
+                </div>
+                <div className="field">
+                  <label htmlFor="inspLyrEnd">Giây kết thúc</label>
+                  <input id="inspLyrEnd" type="number" step="0.05" min="0" />
+                </div>
+              </div>
+
+              <div className="row2">
+                <div className="field">
+                  <label htmlFor="inspLyrColor">Màu chữ câu</label>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <input id="inspLyrColorDef" type="checkbox" title="Dùng màu mặc định" />
+                    <input id="inspLyrColor" type="color" defaultValue="#ffffff" />
+                  </div>
+                </div>
+                <div className="field">
+                  <label htmlFor="inspLyrHi">Màu chạy</label>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <input id="inspLyrHiDef" type="checkbox" title="Dùng màu mặc định" />
+                    <input id="inspLyrHi" type="color" defaultValue="#ffd23f" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor="inspLyrSize">Cỡ chữ riêng (0 = theo cài đặt chung)</label>
+                <input id="inspLyrSize" type="number" min="0" max="25" step="0.5" defaultValue="0" />
+              </div>
+
+              <div className="btns" style={{ marginTop: '8px' }}>
+                <button className="btn sm" id="btnInspSplitLyr" type="button">✂️ Tách tại đầu phát</button>
+                <button className="btn sm" id="btnInspMergeNext" type="button">🔗 Gộp câu sau</button>
+                <button className="btn sm" id="btnInspAddLyr" type="button">➕ Thêm câu mới</button>
+                <button className="btn sm danger" id="btnInspDelLyr" type="button">🗑️ Xóa câu này</button>
+              </div>
+            </div>
+
+            {/* NGỮ CẢNH 4: KHÔNG CHỌN GÌ -> CÀI ĐẶT DỰ ÁN */}
+            <div id="ctxProject" className="ctx-pane">
+              <h3 className="right-pane-title">Cài đặt Dự án</h3>
+              <p className="right-pane-desc">Thông số tỷ lệ, độ phân giải và mờ dần tổng thể video.</p>
+
+              <div className="field">
+                <label>Tỷ lệ khung hình</label>
+                <div className="segmented-control" style={{ width: '100%', justifyContent: 'stretch' }}>
+                  <button id="oV2" type="button" style={{ flex: 1 }} aria-pressed="true">9:16 (Dọc TikTok)</button>
+                  <button id="oH2" type="button" style={{ flex: 1 }} aria-pressed="false">16:9 (Ngang YouTube)</button>
+                </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor="res2">Độ phân giải</label>
+                <select id="res2" className="quality-select" style={{ width: '100%' }}>
+                  <option value="720">720p (Xuất nhanh, mượt mà)</option>
+                  <option value="1080">1080p (Full HD sắc nét)</option>
+                </select>
+              </div>
+
+              <div className="field" style={{ marginTop: '12px' }}>
+                <label>Mờ dần đầu/cuối video</label>
+                <div style={{ display: 'grid', gap: '8px', marginTop: '4px' }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', marginBottom: '3px' }}>
+                      <span style={{ color: 'var(--muted)' }}>Mờ dần đầu video:</span>
+                      <span id="rFadeInVal" style={{ color: 'var(--accent)', fontWeight: 700 }}>0.0s</span>
+                    </div>
+                    <input id="rFadeIn" type="range" min="0" max="5" step="0.1" defaultValue="0" />
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', marginBottom: '3px' }}>
+                      <span style={{ color: 'var(--muted)' }}>Mờ dần cuối video:</span>
+                      <span id="rFadeOutVal" style={{ color: 'var(--accent)', fontWeight: 700 }}>1.5s</span>
+                    </div>
+                    <input id="rFadeOut" type="range" min="0" max="5" step="0.1" defaultValue="1.5" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="field" style={{ marginTop: '8px' }}>
+                <label htmlFor="rFit">Khung ảnh mặc định</label>
+                <select id="rFit" defaultValue="cover">
+                  <option value="cover">Phủ kín khung (Cover)</option>
+                  <option value="contain">Vừa ảnh, nền mờ (Contain)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      {/* THANH KÉO CHIA PREVIEW & TIMELINE */}
+      <div className="tl-resize-handle" id="tlResizeHandle" title="Kéo lên / xuống để chỉnh chiều cao timeline">
+        <div className="tl-resize-bar"></div>
+      </div>
+
+      {/* 6. TIMELINE Ở ĐÁY (MẶC ĐỊNH ~200px) */}
+      <section className="studio-timeline" aria-label="Dòng thời gian chỉnh sửa">
+        {/* THANH CÔNG CỤ TIMELINE GỌN 1 HÀNG (ĐÃ BỎ FADE TRÙNG) */}
+        <div className="timeline-toolbar">
+          <div className="tl-tools-left">
+            <button className="tl-tool-btn" id="btnTlSplit" type="button" title="Tách đoạn tại đầu phát (Phím S)">
+              <span>✂️ Tách (S)</span>
+            </button>
+            <button className="tl-tool-btn danger" id="btnTlDelete" type="button" title="Xóa phần đang chọn (Phím Delete)">
+              <span>🗑️ Xóa</span>
+            </button>
+
+            <span className="tl-divider"></span>
+
+            <label className="tl-tool-btn" htmlFor="fileMedia2" style={{ cursor: 'pointer' }} title="Thêm ảnh hoặc video">
+              <span>+ Thêm clip</span>
+            </label>
+            <input id="fileMedia2" type="file" accept="image/*,video/*" multiple hidden />
+
+            <label className="tl-tool-btn" htmlFor="fileAudio" style={{ cursor: 'pointer' }} title="Thêm nhạc vào bài">
+              <span>+ Thêm nhạc</span>
+            </label>
+
+            <span className="tl-divider"></span>
+
+            <button className="tl-tool-btn" id="btnTlCloseGaps" type="button" title="Xóa khoảng trống giữa các đoạn nhạc">
+              <span>⚡ Nối khoảng trống</span>
+            </button>
+
+            {/* Hidden fallback elements */}
+            <select id="tlFadeIn" defaultValue="0" style={{ display: 'none' }}><option value="0">0</option></select>
+            <select id="tlFadeOut" defaultValue="1.5" style={{ display: 'none' }}><option value="1.5">1.5</option></select>
+            <button id="tSplit" style={{ display: 'none' }} type="button">Split</button>
+            <button id="btnTlPre30" style={{ display: 'none' }} type="button">30s</button>
+            <button id="btnTlPre60" style={{ display: 'none' }} type="button">60s</button>
+            <button id="btnTlPreAll" style={{ display: 'none' }} type="button">All</button>
+            <button id="btnTlUndo" style={{ display: 'none' }} type="button">Undo</button>
+            <button id="btnTlRedo" style={{ display: 'none' }} type="button">Redo</button>
+          </div>
+
+          <div className="tl-tools-right">
+            <button type="button" className="tl-tool-btn" id="btnTlZoomOut" title="Thu nhỏ timeline">－</button>
+            <input id="zoom" type="range" min="15" max="200" step="5" defaultValue="60" style={{ width: '80px', accentColor: 'var(--accent)' }} title="Thu phóng timeline" />
+            <button type="button" className="tl-tool-btn" id="btnTlZoomIn" title="Phóng to timeline">＋</button>
+            <button type="button" className="tl-tool-btn" id="btnTlFitZoom" title="Thu phóng vừa toàn bộ timeline">📐 Vừa khung</button>
+            <button type="button" className="tl-tool-btn" id="btnKbShortcuts" title="Xem danh sách phím tắt">⌨️ Phím tắt</button>
+          </div>
+        </div>
+
+        {/* THÂN TIMELINE GỒM CỘT TIÊU ĐỀ 90px VÀ TRACK CUỘN NGANG */}
+        <div className="timeline-body">
+          <div className="tl-fixed-column">
+            <div className="tl-col-ruler-space"></div>
+            <div className="tl-col-lane lane-clip">🖼️ CLIP</div>
+            <div className="tl-col-lane lane-audio">♫ NHẠC</div>
+            <div className="tl-col-lane lane-lyric">📝 LYRIC</div>
+          </div>
+
+          <div className="tl-scroll-area" id="tlScroll">
             <div className="tl" id="tl">
               <div className="ruler" id="ruler"></div>
               <div id="clips"></div>
               <div className="alane" id="alane"></div>
               <div className="llane" id="llane"></div>
               <div id="ph"></div>
-              <div id="audioDragTip" className="audio-time-tip" style={{ display: 'none' }}></div>
+              <div id="audioDragTip" style={{ display: 'none' }}></div>
             </div>
           </div>
         </div>
 
-        {/* Bảng chỉnh Clip bên dưới timeline */}
-        <div className="insp" id="inspClip">
-          <div className="field" id="gDur">
-            <label htmlFor="iDur">Thời lượng (giây)</label>
-            <input id="iDur" type="number" min="0.3" max="600" step="0.1" />
-          </div>
-          <div className="field" id="gIn" hidden>
-            <label htmlFor="iIn">Cắt từ giây</label>
-            <input id="iIn" type="number" min="0" step="0.1" />
-          </div>
-          <div className="field" id="gOut" hidden>
-            <label htmlFor="iOut">Đến giây</label>
-            <input id="iOut" type="number" min="0" step="0.1" />
-          </div>
-          <div className="field">
-            <label htmlFor="iFit">Khung</label>
-            <select id="iFit" defaultValue="cover">
-              <option value="cover">Phủ kín</option>
-              <option value="contain">Vừa ảnh, nền mờ</option>
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="iFx">Chuyển động</label>
-            <select id="iFx"></select>
-          </div>
-          <div className="field">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label htmlFor="iTr">Chuyển cảnh vào</label>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <button type="button" className="btn sm" id="btnPreviewClipTr" style={{ padding: '2px 8px', fontSize: '11px', height: 'auto', minHeight: 'unset' }} title="Xem thử hiệu ứng chuyển cảnh này">▶ Xem thử</button>
-                <button type="button" className="btn sm" id="btnApplyClipTrAll" style={{ padding: '2px 8px', fontSize: '11px', height: 'auto', minHeight: 'unset' }} title="Áp dụng chuyển cảnh này cho tất cả chỗ nối">Áp dụng tất cả</button>
-              </div>
-            </div>
-            <select id="iTr"></select>
-          </div>
-          <div className="field">
-            <label htmlFor="iTrD">Thời gian chuyển (0.1 - 3s, tối đa 50% clip)</label>
-            <input id="iTrD" type="number" min="0.1" max="3" step="0.1" />
-          </div>
-          <div className="field">
-            <label htmlFor="iCol">Màu</label>
-            <select id="iCol"></select>
-          </div>
-          <div className="btns">
-            <button className="btn sm" id="iL">Dời sang trái</button>
-            <button className="btn sm" id="iR">Dời sang phải</button>
-            <button className="btn sm" id="iDup">Nhân bản</button>
-            <button className="btn sm danger" id="iDel">Xóa clip</button>
-            <span className="note" id="iName" style={{ alignSelf: 'center' }}></span>
-          </div>
+        {/* Bảng chỉnh Lyric trên timeline */}
+        <div id="lyrToolbar" className="lyr-toolbar" style={{ display: 'none' }}>
+          <span className="badge success" id="lyrTbBadge">Câu #1</span>
+          <button className="btn sm" id="btnTbAddLyr" type="button">➕ Thêm câu</button>
+          <button className="btn sm" id="btnTbSplitLyr" type="button">✂️ Tách câu</button>
+          <button className="btn sm" id="btnTbMergeNext" type="button">🔗 Gộp sau</button>
+          <button className="btn sm danger" id="btnTbDelLyr" type="button">🗑️ Xóa</button>
+          <input type="number" id="lyrTbStart" step="0.05" min="0" style={{ width: '50px' }} />
+          <input type="number" id="lyrTbEnd" step="0.05" min="0" style={{ width: '50px' }} />
+          <button className="btn sm" id="btnTbDeselect" type="button">✕</button>
         </div>
 
-        {/* Bảng chỉnh Lyric trực tiếp bên dưới timeline (Requirement 6) */}
+        {/* Bảng chỉnh Clip ẩn / popup */}
+        <div className="insp" id="inspClip" style={{ display: 'none' }}></div>
+
+        {/* Bảng chỉnh Lyric ẩn / popup */}
         <div className="insp" id="inspLyric" style={{ display: 'none' }}>
-          <div className="field" style={{ gridColumn: '1 / -1', minWidth: '0' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-              <span className="lbl" style={{ color: 'var(--accent)', fontWeight: 700, fontSize: '12px' }}>
-                ✏️ Chỉnh câu Lyric trên Timeline
-              </span>
-              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                <span id="inspLyrBadge" className="badge success">Câu #1</span>
-                <span id="inspLyrDurBadge" className="badge neutral" style={{ fontFamily: 'var(--font-mono)' }}>0.00s</span>
-              </div>
-            </div>
-            <textarea
-              id="inspLyrText"
-              rows={2}
-              style={{ width: '100%', fontSize: '13px', padding: '6px 8px', borderRadius: '6px', background: 'var(--panel2)', border: '1px solid var(--line)', fontFamily: 'var(--font-ui)' }}
-              placeholder="Nhập nội dung câu hát..."
-            ></textarea>
-          </div>
-
-          <div className="field">
-            <label htmlFor="inspLyrStart">Bắt đầu (giây)</label>
-            <input id="inspLyrStart" type="number" min="0" step="0.05" />
-          </div>
-
-          <div className="field">
-            <label htmlFor="inspLyrEnd">Kết thúc (giây)</label>
-            <input id="inspLyrEnd" type="number" min="0" step="0.05" />
-          </div>
-
-          <div className="field">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label htmlFor="inspLyrColor">Màu chữ riêng</label>
-              <label className="chk" style={{ fontSize: '10.5px', textTransform: 'none' }}>
-                <input id="inspLyrColorDef" type="checkbox" defaultChecked />
-                <span>Mặc định</span>
-              </label>
-            </div>
-            <input id="inspLyrColor" type="color" defaultValue="#ffffff" disabled />
-          </div>
-
-          <div className="field">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label htmlFor="inspLyrHi">Màu chạy riêng</label>
-              <label className="chk" style={{ fontSize: '10.5px', textTransform: 'none' }}>
-                <input id="inspLyrHiDef" type="checkbox" defaultChecked />
-                <span>Mặc định</span>
-              </label>
-            </div>
-            <input id="inspLyrHi" type="color" defaultValue="#ffd23f" disabled />
-          </div>
-
-          <div className="field">
-            <label htmlFor="inspLyrSize">Cỡ chữ riêng (để trống = chung)</label>
-            <input id="inspLyrSize" type="number" min="0" max="25" step="0.5" placeholder="Để trống = dùng chung" />
-          </div>
-
-          <div className="btns" style={{ gridColumn: '1 / -1' }}>
-            <button className="btn sm pri" id="btnInspSplitLyr" type="button">✂️ Tách câu tại đầu phát</button>
-            <button className="btn sm" id="btnInspMergeNext" type="button">🔗 Gộp câu sau</button>
-            <button className="btn sm" id="btnInspAddLyr" type="button">➕ Thêm câu mới</button>
-            <button className="btn sm danger" id="btnInspDelLyr" type="button">🗑️ Xóa câu này</button>
-            <button className="btn sm" id="btnInspCloseLyr" type="button">Đóng / Về chỉnh clip</button>
-            <span className="note" style={{ alignSelf: 'center', marginLeft: 'auto', fontSize: '11px', color: 'var(--muted)' }}>
-              Phím tắt: Bấm đúp để sửa chữ | Kéo mép chỉnh giờ | Ctrl+Z hoàn tác | Ctrl+Y làm lại
-            </span>
-          </div>
+          <span id="inspLyrBadge"></span>
+          <span id="inspLyrDurBadge"></span>
+          <textarea id="inspLyrText"></textarea>
+          <input id="inspLyrStart" type="number" />
+          <input id="inspLyrEnd" type="number" />
+          <input id="inspLyrColorDef" type="checkbox" />
+          <input id="inspLyrColor" type="color" />
+          <input id="inspLyrHiDef" type="checkbox" />
+          <input id="inspLyrHi" type="color" />
+          <input id="inspLyrSize" type="number" />
+          <button id="btnInspSplitLyr"></button>
+          <button id="btnInspMergeNext"></button>
+          <button id="btnInspAddLyr"></button>
+          <button id="btnInspDelLyr"></button>
+          <button id="btnInspCloseLyr"></button>
         </div>
       </section>
 
+      {/* MODAL XUẤT VIDEO */}
       <div id="exp" hidden>
-        <div className="card" role="dialog" aria-labelledby="expT">
-          <h2 id="expT">Đang xuất video</h2>
+        <div className="card" role="dialog" aria-labelledby="expT" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: '12px', padding: '18px', width: 'min(100%, 460px)', display: 'grid', gap: '12px' }}>
+          <h2 id="expT" style={{ margin: 0, fontSize: '16px' }}>Đang xuất video</h2>
           <p className="note" id="expMsg">
-            Giữ tab này mở và đừng chuyển sang tab khác cho tới khi xong. Video được ghi theo thời gian thật.
+            Giữ tab này mở cho tới khi xong. Video được kết xuất theo thời gian thực chuẩn khung hình và âm thanh.
           </p>
-          <div className="bar">
-            <i id="expBar"></i>
+          <div style={{ height: '8px', borderRadius: '4px', background: 'var(--panel2)', overflow: 'hidden' }}>
+            <i id="expBar" style={{ display: 'block', height: '100%', width: '0%', background: 'var(--accent)', transition: 'width 0.2s' }}></i>
           </div>
-          <video id="expVideo" controls playsInline hidden></video>
+          <video id="expVideo" controls playsInline hidden style={{ width: '100%', maxHeight: '45vh', borderRadius: '6px', background: '#000' }}></video>
           <div className="btns">
-            <button className="btn pri" id="expSave" hidden>Lưu video</button>
+            <button className="btn pri" id="expSave" hidden>Lưu video về máy</button>
             <button className="btn" id="expClose">Hủy</button>
           </div>
         </div>
       </div>
+
+      {/* MODAL PHÍM TẮT */}
       <div id="shortcutsModal" hidden style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 65, display: 'grid', placeItems: 'center', padding: '16px' }}>
-        <div className="card" role="dialog" aria-labelledby="scTitle" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: '12px', padding: '20px', width: 'min(100%, 460px)', display: 'grid', gap: '14px', boxShadow: '0 12px 36px rgba(0,0,0,0.75)' }}>
+        <div className="card" role="dialog" aria-labelledby="scTitle" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: '12px', padding: '20px', width: 'min(100%, 460px)', display: 'grid', gap: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 id="scTitle" style={{ margin: 0, fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--fg)' }}>
+            <h2 id="scTitle" style={{ margin: 0, fontSize: '15px', color: 'var(--fg)', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span>⌨️</span> Danh sách phím tắt
             </h2>
-            <button className="btn sm" id="btnCloseShortcuts" type="button" style={{ padding: '2px 8px', fontSize: '13px' }}>✕</button>
+            <button className="btn sm" id="btnCloseShortcuts" type="button">✕</button>
           </div>
-          <div style={{ display: 'grid', gap: '8px', fontSize: '12.5px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
+          <div style={{ display: 'grid', gap: '8px', fontSize: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
               <span style={{ color: 'var(--muted)' }}>Phát / Tạm dừng</span>
-              <kbd style={{ background: 'var(--panel2)', border: '1px solid var(--line)', padding: '2px 8px', borderRadius: '4px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--accent)' }}>Space</kbd>
+              <kbd style={{ background: 'var(--panel2)', padding: '2px 6px', borderRadius: '4px', color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>Space</kbd>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
-              <span style={{ color: 'var(--muted)' }}>Cắt tách tại đầu phát (nhạc / clip)</span>
-              <kbd style={{ background: 'var(--panel2)', border: '1px solid var(--line)', padding: '2px 8px', borderRadius: '4px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--accent)' }}>S</kbd>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
+              <span style={{ color: 'var(--muted)' }}>Tách đoạn tại đầu phát</span>
+              <kbd style={{ background: 'var(--panel2)', padding: '2px 6px', borderRadius: '4px', color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>S</kbd>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
-              <span style={{ color: 'var(--muted)' }}>Xóa phần đang chọn (nhạc, clip, lyric)</span>
-              <kbd style={{ background: 'var(--panel2)', border: '1px solid var(--line)', padding: '2px 8px', borderRadius: '4px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#f87171' }}>Delete / Backspace</kbd>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
+              <span style={{ color: 'var(--muted)' }}>Xóa phần đang chọn</span>
+              <kbd style={{ background: 'var(--panel2)', padding: '2px 6px', borderRadius: '4px', color: 'var(--danger)', fontFamily: 'var(--font-mono)' }}>Delete / Backspace</kbd>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
-              <span style={{ color: 'var(--muted)' }}>Hoàn tác thao tác</span>
-              <kbd style={{ background: 'var(--panel2)', border: '1px solid var(--line)', padding: '2px 8px', borderRadius: '4px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--fg)' }}>Ctrl + Z</kbd>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
+              <span style={{ color: 'var(--muted)' }}>Hoàn tác / Làm lại</span>
+              <kbd style={{ background: 'var(--panel2)', padding: '2px 6px', borderRadius: '4px', color: 'var(--fg)', fontFamily: 'var(--font-mono)' }}>Ctrl + Z / Ctrl + Y</kbd>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
-              <span style={{ color: 'var(--muted)' }}>Làm lại thao tác</span>
-              <kbd style={{ background: 'var(--panel2)', border: '1px solid var(--line)', padding: '2px 8px', borderRadius: '4px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--fg)' }}>Ctrl + Y / Ctrl + Shift + Z</kbd>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
               <span style={{ color: 'var(--muted)' }}>Tắt / Bật tiếng</span>
-              <kbd style={{ background: 'var(--panel2)', border: '1px solid var(--line)', padding: '2px 8px', borderRadius: '4px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--fg)' }}>M</kbd>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
-              <span style={{ color: 'var(--muted)' }}>Tăng / Giảm âm lượng 5%</span>
-              <kbd style={{ background: 'var(--panel2)', border: '1px solid var(--line)', padding: '2px 8px', borderRadius: '4px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--fg)' }}>▲ / ▼</kbd>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
-              <span style={{ color: 'var(--muted)' }}>Sửa chữ câu lyric trực tiếp</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#ffd23f' }}>Bấm đúp (Double-click)</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
-              <span style={{ color: 'var(--muted)' }}>Kéo mép / thân khối clip</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#00f0ff' }}>Co giãn thời lượng / Đổi thứ tự clip</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
-              <span style={{ color: 'var(--muted)' }}>Kéo mép / kéo thân khối nhạc</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#38bdf8' }}>Cắt đầu đuôi / Dời vị trí</span>
+              <kbd style={{ background: 'var(--panel2)', padding: '2px 6px', borderRadius: '4px', color: 'var(--fg)', fontFamily: 'var(--font-mono)' }}>M</kbd>
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
@@ -885,11 +979,11 @@ export default function App() {
         </div>
       </div>
 
-      {/* Clipchamp-style Transition Modal */}
+      {/* MODAL CHUYỂN CẢNH */}
       <div id="transitionModal" hidden style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', zIndex: 66, display: 'grid', placeItems: 'center', padding: '16px' }}>
-        <div className="card" role="dialog" aria-labelledby="trModalTitle" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: '14px', padding: '18px 20px', width: 'min(100%, 720px)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 16px 40px rgba(0,0,0,0.85)' }}>
+        <div className="card" role="dialog" aria-labelledby="trModalTitle" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: '14px', padding: '18px 20px', width: 'min(100%, 700px)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--line)', paddingBottom: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '18px' }}>✨</span>
               <div>
                 <h2 id="trModalTitle" style={{ margin: 0, fontSize: '15px', color: 'var(--fg)', fontWeight: 700 }}>
@@ -900,52 +994,29 @@ export default function App() {
                 </span>
               </div>
             </div>
-            <button className="btn sm" id="btnTrModalClose" type="button" style={{ padding: '3px 9px', fontSize: '13px' }}>✕</button>
+            <button className="btn sm" id="btnTrModalClose" type="button">✕</button>
           </div>
 
-          {/* Nhóm danh mục hiệu ứng */}
-          <div id="trCatTabs" style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }}>
-            {/* Populated dynamically */}
-          </div>
+          <div id="trCatTabs" style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }}></div>
+          <div id="trGrid" style={{ flex: 1, minHeight: '200px', maxHeight: '320px', overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '8px', padding: '4px' }}></div>
 
-          {/* Lưới các hiệu ứng có animation xem trước */}
-          <div id="trGrid" style={{ flex: 1, minHeight: '220px', maxHeight: '340px', overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '8px', padding: '4px' }}>
-            {/* Populated dynamically */}
-          </div>
-
-          {/* Thanh chỉnh thời lượng chuyển cảnh */}
-          <div style={{ background: 'var(--panel2)', border: '1px solid var(--line)', borderRadius: '8px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '14px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '220px' }}>
-              <label htmlFor="trModalDur" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--fg)', whiteSpace: 'nowrap' }}>
-                Thời gian chuyển:
-              </label>
-              <input id="trModalDur" type="range" min="0.1" max="3.0" step="0.1" defaultValue="1.0" style={{ flex: 1, accentColor: '#00f0ff' }} />
-              <span id="trModalDurVal" style={{ minWidth: '42px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '12px', color: '#00f0ff', background: 'rgba(0,240,255,0.12)', border: '1px solid rgba(0,240,255,0.3)', padding: '2px 6px', borderRadius: '4px' }}>
-                1.0s
-              </span>
+          <div style={{ background: 'var(--panel2)', border: '1px solid var(--line)', borderRadius: '8px', padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+              <label htmlFor="trModalDur" style={{ fontSize: '11.5px', fontWeight: 600, whiteSpace: 'nowrap' }}>Thời gian chuyển:</label>
+              <input id="trModalDur" type="range" min="0.1" max="3.0" step="0.1" defaultValue="1.0" style={{ flex: 1, accentColor: 'var(--accent)' }} />
+              <span id="trModalDurVal" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '11.5px', color: 'var(--accent)' }}>1.0s</span>
             </div>
-            <span id="trModalDurHint" style={{ fontSize: '10.5px', color: 'var(--muted)' }}>
-              (Tự giới hạn tối đa 50% độ dài clip ngắn hơn)
-            </span>
+            <span id="trModalDurHint" style={{ fontSize: '10.5px', color: 'var(--muted)' }}></span>
           </div>
 
-          {/* Thanh công cụ thao tác */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', paddingTop: '4px', borderTop: '1px solid var(--line)' }}>
-            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <button className="btn sm" id="btnTrModalPreview" type="button" title="Xem thử hiệu ứng này kèm 1s trước và 1s sau điểm nối">
-                ▶ Xem thử chỗ nối
-              </button>
-              <button className="btn sm" id="btnTrModalApplyAll" type="button" title="Áp dụng hiệu ứng và thời gian này cho tất cả chỗ nối giữa các clip">
-                Áp dụng cho tất cả chỗ nối
-              </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button className="btn sm" id="btnTrModalPreview" type="button">▶ Xem thử chỗ nối</button>
+              <button className="btn sm" id="btnTrModalApplyAll" type="button">Áp dụng tất cả</button>
             </div>
-            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-              <button className="btn sm danger" id="btnTrModalRemove" type="button" title="Hủy chuyển cảnh tại chỗ nối này">
-                Cắt thẳng (Không chuyển)
-              </button>
-              <button className="btn pri sm" id="btnTrModalDone" type="button">
-                Xong
-              </button>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button className="btn sm danger" id="btnTrModalRemove" type="button">Cắt thẳng</button>
+              <button className="btn pri sm" id="btnTrModalDone" type="button">Xong</button>
             </div>
           </div>
         </div>

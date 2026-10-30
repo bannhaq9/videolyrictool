@@ -188,7 +188,7 @@ export function initStudio() {
     syncMusicMode: 'even' as 'even' | 'extendLast',
     speed: 1.0,
     viz: {
-      type: 'bars' as 'none' | 'bars' | 'mirror' | 'circle' | 'wave',
+      type: 'bars' as 'none' | 'bars' | 'mirror' | 'circle' | 'wave' | 'dots' | 'ribbon' | 'ring' | 'ecg' | 'polygon' | 'stereo' | 'flame' | 'blob' | 'mountain',
       color: '#00f0ff',
       color2: '#ff007f',
       colorMode: 'gradient' as 'solid' | 'gradient' | 'rainbow',
@@ -286,9 +286,9 @@ export function initStudio() {
   function fitStage() {
     const st = $('#stage');
     if (!st) return;
-    const aw = Math.max(200, st.clientWidth - 24);
-    const mh = Math.max(240, Math.min(window.innerHeight * 0.62, 640));
-    const sc = Math.min(aw / cv.width, mh / cv.height);
+    const aw = Math.max(160, st.clientWidth > 16 ? st.clientWidth - 16 : 360);
+    const ah = Math.max(160, st.clientHeight > 16 ? st.clientHeight - 16 : 360);
+    const sc = Math.min(aw / cv.width, ah / cv.height);
     cv.style.width = Math.floor(cv.width * sc) + 'px';
     cv.style.height = Math.floor(cv.height * sc) + 'px';
   }
@@ -511,9 +511,9 @@ export function initStudio() {
       const el = makeSample(i);
       const c = newClip({
         type: 'image',
-        name: 'Ảnh mẫu ' + (i + 1),
+        name: i === 0 ? 'Hoa nở bên tường.jpg' : ('Ảnh mẫu ' + (i + 1)),
         el,
-        dur: 3,
+        dur: i === 0 ? 4 : 3,
         sample: true,
         fx: ['zoomin', 'panl', 'zoomout', 'panr'][i],
         tr: i ? 'fade' : 'none'
@@ -528,6 +528,28 @@ export function initStudio() {
     const rawEl = $('#lyrRawInput') as HTMLTextAreaElement | null;
     if (rawEl) rawEl.value = rawLyricLines().join('\n');
     switchLyricStep(1);
+
+    // Tải ảnh mẫu bức tranh hoa nở từ tệp mẫu
+    const imgArt = new Image();
+    imgArt.crossOrigin = 'anonymous';
+    imgArt.onload = () => {
+      try {
+        const cropC = document.createElement('canvas');
+        cropC.width = 720;
+        cropC.height = 1280;
+        const cx = cropC.getContext('2d')!;
+        cx.drawImage(imgArt, 746, 146, 126, 280, 0, 0, 720, 1280);
+        if (S.sample && S.clips[0]) {
+          S.clips[0].el = cropC;
+          S.clips[0].thumb = thumbFrom(cropC);
+          S.clips[0].name = 'Hoa nở bên tường.jpg';
+          renderTimeline();
+          renderMediaDrawerCards();
+          draw();
+        }
+      } catch (e) {}
+    };
+    imgArt.src = '/assets/aistudio/image_3edd8ee8.png';
   }
 
   /* ---------- vẽ khung hình & hiệu ứng chuyển cảnh ---------- */
@@ -1169,14 +1191,17 @@ export function initStudio() {
     drawText(ti.text, cv.height * 0.2, fs, null, a);
   }
 
-  /* ---------- hiệu ứng sóng nhạc ---------- */
+  /* ---------- hiệu ứng sóng nhạc đa phong cách ---------- */
+  const vizPeakFall = new Float32Array(128);
+  const vizPeakSpeed = new Float32Array(128);
+
   function drawVisualizer(t: number) {
     const vz = S.viz;
-    if (!vz || vz.type === 'none') return;
+    if (!vz || vz.type === 'none' || !A.loaded || !S.audioBlocks || !S.audioBlocks.length) return;
     const W = cv.width, H = cv.height;
 
-    // Lấy dữ liệu phân tích từ AnalyserNode hoặc mô phỏng nhịp khi tạm dừng
-    const isLive = (S.playing || exporting) && !!A.analyser && !A.el.paused;
+    // Lấy dữ liệu phân tích từ AnalyserNode hoặc mô phỏng nhịp khi tạm dừng / xem trước
+    const isLive = (S.playing || exporting || A.isPreviewing || A.isTrimPreviewing) && !!A.analyser;
     const binCount = A.analyser ? A.analyser.frequencyBinCount : 128;
     const freqData = new Uint8Array(binCount);
     const timeData = new Uint8Array(binCount);
@@ -1185,30 +1210,36 @@ export function initStudio() {
       A.analyser.getByteFrequencyData(freqData);
       A.analyser.getByteTimeDomainData(timeData);
     } else {
-      // Sóng xem trước trực quan khi đang tạm dừng / tua
+      // Sóng xem trước trực quan sinh động khi đang tạm dừng / tua
       for (let i = 0; i < binCount; i++) {
         const p = i / binCount;
-        const bassWave = Math.sin(t * 3.5) * 0.25 + 0.75;
-        const wave = Math.sin(i * 0.18 + t * 4) * 0.3 + 0.7;
-        const decay = Math.pow(Math.max(0.01, 1 - p), 0.75);
-        freqData[i] = Math.min(255, Math.floor(190 * decay * wave * bassWave));
-        timeData[i] = Math.floor(128 + Math.sin(i * 0.12 + t * 5) * 40 * Math.sin(p * Math.PI));
+        const bassWave = Math.sin(t * 3.6) * 0.35 + 0.65;
+        const wave = Math.sin(i * 0.22 + t * 4.2) * 0.35 + 0.65;
+        const decay = Math.pow(Math.max(0.01, 1 - p), 0.72);
+        freqData[i] = Math.min(255, Math.floor(210 * decay * wave * bassWave));
+        timeData[i] = Math.floor(128 + Math.sin(i * 0.14 + t * 4.8) * 42 * Math.sin(p * Math.PI));
       }
     }
+
+    // Tính toán năng lượng dải trầm (Bass Energy) để tạo độ nảy / rung chấn
+    let bassSum = 0;
+    const bassBins = Math.min(8, binCount);
+    for (let b = 0; b < bassBins; b++) bassSum += freqData[b];
+    const bassAvg = (bassSum / (bassBins * 255)) * vz.sens;
 
     ctx.save();
 
     // Hiệu ứng phát sáng Neon
     if (vz.glow) {
       ctx.shadowColor = vz.color;
-      ctx.shadowBlur = Math.round(15 * vz.size);
+      ctx.shadowBlur = Math.round(16 * vz.size);
     }
 
     // Hàm tạo màu (đơn sắc, gradient, hoặc cầu vồng)
     const getColor = (prog: number, x1: number, y1: number, x2: number, y2: number) => {
       if (vz.colorMode === 'solid') return vz.color;
       if (vz.colorMode === 'rainbow') {
-        const hue = Math.round(((prog * 360) + (t * 50)) % 360);
+        const hue = Math.round(((prog * 360) + (t * 55)) % 360);
         return 'hsl(' + hue + ', 95%, 60%)';
       }
       const grad = ctx.createLinearGradient(x1, y1, x2, y2);
@@ -1220,6 +1251,7 @@ export function initStudio() {
     const cx = W * (vz.x / 100);
     const cy = H * (vz.y / 100);
 
+    // 1. THANH EQUALIZER (CỘT ĐỨNG & ĐỐI XỨNG)
     if (vz.type === 'bars' || vz.type === 'mirror') {
       const numBars = clamp(vz.bars || 32, 16, 64);
       const totalW = Math.min(W * 0.94, W * 0.82 * vz.size);
@@ -1230,48 +1262,58 @@ export function initStudio() {
       const isMirror = vz.type === 'mirror';
 
       for (let i = 0; i < numBars; i++) {
-        // Phân bổ tần số: tập trung nhiều dải bass & mid
-        const freqIdx = Math.floor(Math.pow(i / numBars, 1.32) * (binCount * 0.65));
+        const freqIdx = Math.floor(Math.pow(i / numBars, 1.3) * (binCount * 0.65));
         const rawVal = freqData[Math.min(binCount - 1, freqIdx)] || 0;
         const normalized = (rawVal / 255) * vz.sens;
         const barH = Math.max(isMirror ? 6 : 4, normalized * maxH);
+
+        // Vật lý hạt đỉnh rơi (falling peak caps)
+        if (normalized > vizPeakFall[i]) {
+          vizPeakFall[i] = normalized;
+          vizPeakSpeed[i] = 0;
+        } else {
+          vizPeakSpeed[i] += 0.007;
+          vizPeakFall[i] = Math.max(0, vizPeakFall[i] - vizPeakSpeed[i]);
+        }
 
         const bx = startX + i * barSlot + (barSlot - barW) / 2;
         const prog = i / (numBars - 1 || 1);
 
         if (isMirror) {
-          // Equalizer đối xứng trên/dưới baseline
           const by = cy - barH / 2;
           ctx.fillStyle = getColor(prog, bx, cy - maxH / 2, bx, cy + maxH / 2);
           ctx.beginPath();
-          if ((ctx as any).roundRect) {
-            (ctx as any).roundRect(bx, by, barW, barH, barW / 2);
-          } else {
-            ctx.rect(bx, by, barW, barH);
-          }
+          if ((ctx as any).roundRect) (ctx as any).roundRect(bx, by, barW, barH, barW / 2);
+          else ctx.rect(bx, by, barW, barH);
           ctx.fill();
+
+          // Hạt đỉnh trên và dưới
+          const pkTop = cy - (vizPeakFall[i] * maxH) / 2 - 3;
+          const pkBot = cy + (vizPeakFall[i] * maxH) / 2 + 1;
+          ctx.fillRect(bx, pkTop, barW, 2);
+          ctx.fillRect(bx, pkBot, barW, 2);
         } else {
-          // Equalizer cột đứng từ baseline hướng lên
           const by = cy - barH;
           ctx.fillStyle = getColor(prog, bx, cy - maxH, bx, cy);
           ctx.beginPath();
-          if ((ctx as any).roundRect) {
-            (ctx as any).roundRect(bx, by, barW, barH, [barW / 2, barW / 2, 0, 0]);
-          } else {
-            ctx.rect(bx, by, barW, barH);
-          }
+          if ((ctx as any).roundRect) (ctx as any).roundRect(bx, by, barW, barH, [barW / 2, barW / 2, 0, 0]);
+          else ctx.rect(bx, by, barW, barH);
           ctx.fill();
 
-          // Phản xạ mờ nhẹ dưới chân cột
+          // Hạt đỉnh rơi lơ lửng trên đầu cột
+          const pkY = cy - vizPeakFall[i] * maxH - 3;
+          ctx.fillStyle = getColor(prog, bx, pkY, bx + barW, pkY);
+          ctx.fillRect(bx, pkY, barW, Math.max(2, 2.5 * vz.size));
+
+          // Phản xạ mờ nhẹ dưới sàn
           ctx.save();
-          ctx.globalAlpha = 0.24;
+          ctx.globalAlpha = 0.22;
           ctx.fillStyle = vz.color;
           ctx.fillRect(bx, cy + 2, barW, Math.min(barH * 0.35, 24));
           ctx.restore();
         }
       }
 
-      // Vạch đường chân (baseline) cho cột đứng
       if (!isMirror) {
         ctx.strokeStyle = vz.color;
         ctx.lineWidth = Math.max(2, 2.5 * vz.size);
@@ -1281,19 +1323,452 @@ export function initStudio() {
         ctx.lineTo(startX + totalW + 8, cy);
         ctx.stroke();
       }
-    } else if (vz.type === 'circle') {
-      // Sóng tròn tỏa đều 360 độ quanh logo
-      let bassSum = 0;
-      const bassBins = Math.min(8, binCount);
-      for (let b = 0; b < bassBins; b++) bassSum += freqData[b];
-      const bassAvg = (bassSum / (bassBins * 255)) * vz.sens;
 
+    // 2. MA TRẬN HẠT LED (STACKED DOTS MATRIX)
+    } else if (vz.type === 'dots') {
+      const numBars = clamp(vz.bars || 32, 16, 48);
+      const totalW = Math.min(W * 0.94, W * 0.82 * vz.size);
+      const startX = cx - totalW / 2;
+      const barSlot = totalW / numBars;
+      const maxH = H * 0.24 * vz.size;
+      const dotR = Math.max(2, Math.min(6, (barSlot * 0.65) / 2));
+      const dotStep = dotR * 2 + 3.5;
+      const totalDots = Math.floor(maxH / dotStep);
+
+      for (let i = 0; i < numBars; i++) {
+        const freqIdx = Math.floor(Math.pow(i / numBars, 1.25) * (binCount * 0.65));
+        const rawVal = freqData[Math.min(binCount - 1, freqIdx)] || 0;
+        const normalized = (rawVal / 255) * vz.sens;
+        const activeDots = Math.floor(normalized * totalDots);
+
+        if (normalized > vizPeakFall[i]) {
+          vizPeakFall[i] = normalized;
+          vizPeakSpeed[i] = 0;
+        } else {
+          vizPeakSpeed[i] += 0.007;
+          vizPeakFall[i] = Math.max(0, vizPeakFall[i] - vizPeakSpeed[i]);
+        }
+
+        const bx = startX + i * barSlot + barSlot / 2;
+        const prog = i / (numBars - 1 || 1);
+
+        for (let d = 0; d < totalDots; d++) {
+          const dy = cy - d * dotStep - dotR;
+          const isActive = d < activeDots;
+          ctx.save();
+          if (isActive) {
+            ctx.fillStyle = getColor(prog, bx - dotR, cy - maxH, bx + dotR, cy);
+            ctx.globalAlpha = 0.95;
+          } else {
+            ctx.fillStyle = 'rgba(255,255,255,0.08)';
+            ctx.globalAlpha = 0.4;
+          }
+          ctx.beginPath();
+          ctx.arc(bx, dy, dotR, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // Hạt LED đỉnh rơi chậm
+        const pkIdx = Math.floor(vizPeakFall[i] * totalDots);
+        if (pkIdx > 0 && pkIdx < totalDots) {
+          const pkY = cy - pkIdx * dotStep - dotR;
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(bx, pkY, dotR + 0.8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+    // 3. DẢI LỤA NEON UỐN LƯỢN ĐA TẦNG (NEON SILK RIBBON)
+    } else if (vz.type === 'ribbon') {
+      const totalW = Math.min(W * 0.96, W * 0.9 * vz.size);
+      const startX = cx - totalW / 2;
+      const numPts = 36;
+      const step = totalW / (numPts - 1);
+      const maxAmp = H * 0.16 * vz.size * vz.sens;
+
+      // Vẽ 3 dải lụa sóng đan xen (Bass, Mid, Treble)
+      const layers = [
+        { color: vz.color, freqScale: 0.25, timeShift: 3.2, ampScale: 1.0, alpha: 0.85, width: 3.5 },
+        { color: vz.color2, freqScale: 0.5, timeShift: -2.8, ampScale: 0.75, alpha: 0.75, width: 2.5 },
+        { color: '#ffffff', freqScale: 0.85, timeShift: 4.5, ampScale: 0.5, alpha: 0.65, width: 2.0 }
+      ];
+
+      layers.forEach(ly => {
+        const pts: { x: number; y: number }[] = [];
+        for (let i = 0; i < numPts; i++) {
+          const norm = i / (numPts - 1);
+          const fIdx = Math.floor(norm * (binCount * ly.freqScale));
+          const val = (freqData[Math.min(binCount - 1, fIdx)] || 0) / 255;
+          const envelope = Math.sin(norm * Math.PI);
+          const wavePhase = Math.sin(norm * 8 + t * ly.timeShift);
+          const dy = (val * wavePhase * maxAmp * ly.ampScale) * envelope;
+          pts.push({ x: startX + i * step, y: cy + dy });
+        }
+
+        // Đổ bóng gradient dưới dải lụa
+        ctx.save();
+        ctx.globalAlpha = ly.alpha * 0.25;
+        const gGrad = ctx.createLinearGradient(0, cy - maxAmp, 0, cy + maxAmp);
+        gGrad.addColorStop(0, ly.color);
+        gGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = gGrad;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, cy);
+        for (let i = 0; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.lineTo(pts[pts.length - 1].x, cy);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        // Đường lụa neon uốn cong mượt mà
+        ctx.save();
+        ctx.strokeStyle = ly.color;
+        ctx.lineWidth = Math.max(2, ly.width * vz.size);
+        ctx.globalAlpha = ly.alpha;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length - 1; i++) {
+          const xc = (pts[i].x + pts[i + 1].x) / 2;
+          const yc = (pts[i].y + pts[i + 1].y) / 2;
+          ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
+        }
+        ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+        ctx.stroke();
+        ctx.restore();
+      });
+
+    // 4. SÓNG XUNG KÍCH TỎA TRÒN (SHOCKWAVE PULSE RINGS)
+    } else if (vz.type === 'ring') {
+      const baseR = Math.min(W, H) * 0.14 * vz.size;
+      const pulseR = baseR * (1 + bassAvg * 0.16);
+      const maxRingR = Math.min(W, H) * 0.44 * vz.size;
+      const numRings = 5;
+
+      // Các vòng tròn xung kích nở dần theo thời gian & bass
+      for (let r = 0; r < numRings; r++) {
+        const phase = ((r / numRings) + t * 0.65 + bassAvg * 0.1) % 1;
+        const curR = pulseR + phase * (maxRingR - pulseR);
+        const alpha = Math.sin(phase * Math.PI) * 0.85;
+
+        ctx.save();
+        ctx.strokeStyle = getColor(phase, cx - curR, cy, cx + curR, cy);
+        ctx.lineWidth = Math.max(1.5, (4 - phase * 2.5) * vz.size);
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(cx, cy, curR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Hào quang lõi trung tâm
+      const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, pulseR);
+      coreGrad.addColorStop(0, vz.color2);
+      coreGrad.addColorStop(0.7, vz.color);
+      coreGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = coreGrad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, pulseR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Biểu tượng đĩa nhạc / loa rung tại tâm
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold ' + Math.round(pulseR * 0.5) + 'px "Be Vietnam Pro",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('⚡', cx, cy);
+
+    // 5. NHỊP ĐẬP CON TIM (HEARTBEAT ECG PULSE)
+    } else if (vz.type === 'ecg') {
+      const totalW = Math.min(W * 0.95, W * 0.88 * vz.size);
+      const startX = cx - totalW / 2;
+      const maxAmp = H * 0.15 * vz.size * vz.sens;
+      const numPoints = 80;
+      const step = totalW / (numPoints - 1);
+
+      // Điểm tâm quét di chuyển từ trái sang phải
+      const sweepPos = ((t * 0.5) % 1) * numPoints;
+
+      ctx.save();
+      ctx.strokeStyle = getColor(0.5, startX, cy, startX + totalW, cy);
+      ctx.lineWidth = Math.max(2.5, 3.5 * vz.size);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+
+      let headX = startX, headY = cy;
+
+      for (let i = 0; i < numPoints; i++) {
+        const x = startX + i * step;
+        let y = cy;
+        const distFromSweep = (i - sweepPos + numPoints) % numPoints;
+
+        if (distFromSweep < 14) {
+          // Chuỗi xung nhịp tim P-Q-R-S-T
+          const p = distFromSweep / 14;
+          if (p < 0.2) {
+            y = cy - Math.sin(p / 0.2 * Math.PI) * (maxAmp * 0.25);
+          } else if (p < 0.35) {
+            y = cy + (maxAmp * 0.18);
+          } else if (p < 0.55) {
+            // Đỉnh nhọn R vút cao theo Bass
+            const rAmp = maxAmp * (1.2 + bassAvg * 1.5);
+            y = cy - rAmp;
+          } else if (p < 0.72) {
+            y = cy + (maxAmp * 0.45);
+          } else if (p < 0.9) {
+            y = cy - Math.sin((p - 0.72) / 0.18 * Math.PI) * (maxAmp * 0.35);
+          }
+        } else {
+          // Đường cơ sở rung động nhẹ theo âm treble
+          const fIdx = Math.floor((i / numPoints) * (binCount * 0.5));
+          const fv = (freqData[fIdx] || 0) / 255;
+          y = cy + (Math.sin(i * 0.35 + t * 6) * 3 + (fv - 0.5) * 6) * vz.size;
+        }
+
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+
+        if (Math.floor(sweepPos) === i) {
+          headX = x; headY = y;
+        }
+      }
+      ctx.stroke();
+
+      // Đầu vệt sáng quét Laser Neon
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(headX, headY, Math.max(4, 5 * vz.size), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+    // 6. LỤC GIÁC NĂNG LƯỢNG CYBER (HEXAGON AUDIO CORE)
+    } else if (vz.type === 'polygon') {
+      const baseR = Math.min(W, H) * 0.15 * vz.size;
+      const pulseR = baseR * (1 + bassAvg * 0.18);
+      const sides = 6;
+      const barsPerSide = clamp(Math.floor((vz.bars || 36) / sides), 4, 10);
+      const maxBarLen = baseR * 0.85 * vz.sens;
+
+      // Vẽ hình lục giác tâm
+      ctx.save();
+      ctx.strokeStyle = vz.color;
+      ctx.lineWidth = Math.max(2, 3 * vz.size);
+      ctx.beginPath();
+      for (let s = 0; s < sides; s++) {
+        const ang = (s / sides) * Math.PI * 2 - Math.PI / 2;
+        const x = cx + Math.cos(ang) * pulseR;
+        const y = cy + Math.sin(ang) * pulseR;
+        if (s === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+
+      // Các tia sóng bắn vuông góc từ 6 cạnh
+      for (let s = 0; s < sides; s++) {
+        const ang1 = (s / sides) * Math.PI * 2 - Math.PI / 2;
+        const ang2 = ((s + 1) / sides) * Math.PI * 2 - Math.PI / 2;
+        const x1 = cx + Math.cos(ang1) * pulseR;
+        const y1 = cy + Math.sin(ang1) * pulseR;
+        const x2 = cx + Math.cos(ang2) * pulseR;
+        const y2 = cy + Math.sin(ang2) * pulseR;
+
+        const normalAng = (ang1 + ang2) / 2;
+
+        for (let b = 0; b < barsPerSide; b++) {
+          const frac = (b + 0.5) / barsPerSide;
+          const bx = x1 + (x2 - x1) * frac;
+          const by = y1 + (y2 - y1) * frac;
+
+          const fIdx = Math.floor(((s * barsPerSide + b) / (sides * barsPerSide)) * (binCount * 0.65));
+          const val = (freqData[Math.min(binCount - 1, fIdx)] || 0) / 255;
+          const barLen = Math.max(3, val * maxBarLen);
+
+          const ex = bx + Math.cos(normalAng) * barLen;
+          const ey = by + Math.sin(normalAng) * barLen;
+
+          ctx.strokeStyle = getColor(frac, bx, by, ex, ey);
+          ctx.lineWidth = Math.max(2, (pulseR / barsPerSide) * 0.55);
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(ex, ey);
+          ctx.stroke();
+        }
+      }
+
+      // Tâm lục giác: Biểu tượng năng lượng
+      ctx.fillStyle = vz.color2;
+      ctx.font = 'bold ' + Math.round(pulseR * 0.45) + 'px "Be Vietnam Pro",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('⬢', cx, cy);
+      ctx.restore();
+
+    // 7. THANH SÓNG 2 BÊN VIỀN MÀN HÌNH (DUAL SIDE STEREO BORDERS)
+    } else if (vz.type === 'stereo') {
+      const numBars = clamp(vz.bars || 28, 16, 40);
+      const totalH = Math.min(H * 0.78, H * 0.7 * vz.size);
+      const startY = cy - totalH / 2;
+      const barSlot = totalH / numBars;
+      const barH = Math.max(3, barSlot * 0.72);
+      const maxW = W * 0.22 * vz.size * vz.sens;
+
+      for (let i = 0; i < numBars; i++) {
+        const freqIdx = Math.floor(Math.pow(i / numBars, 1.2) * (binCount * 0.65));
+        const val = (freqData[Math.min(binCount - 1, freqIdx)] || 0) / 255;
+        const barLen = Math.max(6, val * maxW);
+        const y = startY + i * barSlot + (barSlot - barH) / 2;
+        const prog = i / (numBars - 1 || 1);
+
+        // Mép trái bắn sang phải
+        ctx.fillStyle = getColor(prog, 0, y, barLen, y);
+        ctx.beginPath();
+        if ((ctx as any).roundRect) (ctx as any).roundRect(0, y, barLen, barH, [0, barH / 2, barH / 2, 0]);
+        else ctx.rect(0, y, barLen, barH);
+        ctx.fill();
+
+        // Mép phải bắn sang trái
+        ctx.fillStyle = getColor(prog, W, y, W - barLen, y);
+        ctx.beginPath();
+        if ((ctx as any).roundRect) (ctx as any).roundRect(W - barLen, y, barLen, barH, [barH / 2, 0, 0, barH / 2]);
+        else ctx.rect(W - barLen, y, barLen, barH);
+        ctx.fill();
+      }
+
+    // 8. NGỌN LỬA CYBER SPIKES (FLAME SPIKES)
+    } else if (vz.type === 'flame') {
+      const numBars = clamp(vz.bars || 32, 16, 48);
+      const totalW = Math.min(W * 0.94, W * 0.84 * vz.size);
+      const startX = cx - totalW / 2;
+      const barSlot = totalW / numBars;
+      const maxH = H * 0.26 * vz.size * vz.sens;
+
+      for (let i = 0; i < numBars; i++) {
+        const freqIdx = Math.floor(Math.pow(i / numBars, 1.25) * (binCount * 0.65));
+        const val = (freqData[Math.min(binCount - 1, freqIdx)] || 0) / 255;
+        const flameH = Math.max(8, val * maxH);
+        const bx = startX + i * barSlot;
+        const prog = i / (numBars - 1 || 1);
+
+        // Đỉnh ngọn lửa rung rinh nhẹ
+        const flickerX = Math.sin(t * 14 + i * 2.3) * (barSlot * 0.35);
+        const tipX = bx + barSlot / 2 + flickerX;
+        const tipY = cy - flameH;
+
+        ctx.fillStyle = getColor(prog, bx, cy, tipX, tipY);
+        ctx.beginPath();
+        ctx.moveTo(bx + 1, cy);
+        ctx.quadraticCurveTo(bx + barSlot * 0.15, cy - flameH * 0.55, tipX, tipY);
+        ctx.quadraticCurveTo(bx + barSlot * 0.85, cy - flameH * 0.55, bx + barSlot - 1, cy);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+    // 9. GIỌT NƯỚC ÂM THANH BIẾN HÌNH (LIQUID AUDIO BLOB)
+    } else if (vz.type === 'blob') {
+      const baseR = Math.min(W, H) * 0.16 * vz.size;
+      const maxAmp = baseR * 0.7 * vz.sens;
+      const numNodes = 48;
+      const pts: { x: number; y: number }[] = [];
+
+      for (let i = 0; i < numNodes; i++) {
+        const ang = (i / numNodes) * Math.PI * 2 - Math.PI / 2;
+        const normIdx = i < numNodes / 2 ? i / (numNodes / 2) : (numNodes - i) / (numNodes / 2);
+        const fIdx = Math.floor(normIdx * (binCount * 0.65));
+        const val = (freqData[Math.min(binCount - 1, fIdx)] || 0) / 255;
+        const ripple = Math.sin(i * 0.8 + t * 4.5) * (val * 8);
+        const r = baseR * (1 + bassAvg * 0.14) + val * maxAmp + ripple;
+        pts.push({ x: cx + Math.cos(ang) * r, y: cy + Math.sin(ang) * r });
+      }
+
+      // Tô màu gradient tỏa tròn bên trong khối giọt nước
+      const blobGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, baseR * 1.8);
+      blobGrad.addColorStop(0, vz.color2);
+      blobGrad.addColorStop(0.75, vz.color);
+      blobGrad.addColorStop(1, 'rgba(0,0,0,0.1)');
+
+      ctx.save();
+      ctx.fillStyle = blobGrad;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = Math.max(2, 2.8 * vz.size);
+      ctx.beginPath();
+      ctx.moveTo((pts[0].x + pts[numNodes - 1].x) / 2, (pts[0].y + pts[numNodes - 1].y) / 2);
+      for (let i = 0; i < numNodes; i++) {
+        const next = pts[(i + 1) % numNodes];
+        const mx = (pts[i].x + next.x) / 2;
+        const my = (pts[i].y + next.y) / 2;
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Tâm giọt nước: Nốt nhạc trắng
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold ' + Math.round(baseR * 0.55) + 'px "Be Vietnam Pro",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('♫', cx, cy);
+      ctx.restore();
+
+    // 10. RẶNG NÚI PHỔ TẦN 3D SYNTHWAVE (SYNTHWAVE MOUNTAIN RIDGES)
+    } else if (vz.type === 'mountain') {
+      const totalW = Math.min(W * 0.96, W * 0.88 * vz.size);
+      const startX = cx - totalW / 2;
+      const numPts = 42;
+      const step = totalW / (numPts - 1);
+      const maxH = H * 0.22 * vz.size * vz.sens;
+
+      const layers = [
+        { color: vz.color2, freqRange: 0.8, ampMul: 0.55, yOffset: -18, alpha: 0.45 },
+        { color: vz.color, freqRange: 0.55, ampMul: 0.78, yOffset: -8, alpha: 0.7 },
+        { color: '#ffffff', freqRange: 0.35, ampMul: 1.0, yOffset: 0, alpha: 0.95 }
+      ];
+
+      layers.forEach(ly => {
+        const pts: { x: number; y: number }[] = [];
+        for (let i = 0; i < numPts; i++) {
+          const norm = i / (numPts - 1);
+          const fIdx = Math.floor(Math.pow(norm, 1.2) * (binCount * ly.freqRange));
+          const val = (freqData[Math.min(binCount - 1, fIdx)] || 0) / 255;
+          const envelope = Math.sin(norm * Math.PI);
+          const py = cy + ly.yOffset - val * maxH * ly.ampMul * envelope;
+          pts.push({ x: startX + i * step, y: py });
+        }
+
+        ctx.save();
+        const mGrad = ctx.createLinearGradient(0, cy - maxH, 0, cy);
+        mGrad.addColorStop(0, ly.color);
+        mGrad.addColorStop(1, 'rgba(0,0,0,0.5)');
+        ctx.fillStyle = mGrad;
+        ctx.globalAlpha = ly.alpha;
+
+        ctx.beginPath();
+        ctx.moveTo(startX, cy);
+        for (let i = 0; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.lineTo(startX + totalW, cy);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = ly.color;
+        ctx.lineWidth = Math.max(1.5, 2.5 * vz.size);
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+        ctx.restore();
+      });
+
+    // 11. SÓNG TRÒN ĐĨA THAN VINYL (RADIAL VINYL 360)
+    } else if (vz.type === 'circle') {
       const baseR = Math.min(W, H) * 0.16 * vz.size;
       const pulseR = baseR * (1 + bassAvg * 0.09);
       const numPins = clamp((vz.bars || 32) * 2, 36, 72);
       const pinMaxLen = baseR * 0.78 * vz.sens;
 
-      // Các tia sóng phổ tần tỏa tròn
       for (let i = 0; i < numPins; i++) {
         const angle = (i / numPins) * Math.PI * 2 - Math.PI / 2;
         const normIdx = i < numPins / 2 ? i / (numPins / 2) : (numPins - i) / (numPins / 2);
@@ -1315,32 +1790,27 @@ export function initStudio() {
         ctx.stroke();
       }
 
-      // Vòng tròn viền phát sáng quanh tâm
       ctx.beginPath();
       ctx.arc(cx, cy, pulseR + 4, 0, Math.PI * 2);
       ctx.strokeStyle = vz.color;
       ctx.lineWidth = Math.max(2, 3 * vz.size);
       ctx.stroke();
 
-      // Logo hoặc Đĩa than ở tâm
       ctx.save();
       ctx.beginPath();
       ctx.arc(cx, cy, pulseR, 0, Math.PI * 2);
       ctx.clip();
 
       if (vz.logoImg && vz.logoImg.complete && vz.logoImg.naturalWidth > 0) {
-        // Ảnh logo người dùng tải lên
         const img = vz.logoImg;
         const scale = Math.max((pulseR * 2) / img.naturalWidth, (pulseR * 2) / img.naturalHeight);
         const dw = img.naturalWidth * scale;
         const dh = img.naturalHeight * scale;
         ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
       } else {
-        // Đĩa than vinyl thời thượng mặc định
         ctx.fillStyle = '#0f1418';
         ctx.fillRect(cx - pulseR, cy - pulseR, pulseR * 2, pulseR * 2);
 
-        // Các vòng rãnh đĩa vinyl tinh tế
         ctx.strokeStyle = 'rgba(255,255,255,0.09)';
         ctx.lineWidth = 1;
         for (let r = pulseR * 0.35; r < pulseR * 0.95; r += 7 * vz.size) {
@@ -1349,7 +1819,6 @@ export function initStudio() {
           ctx.stroke();
         }
 
-        // Nhãn tâm đĩa than
         const labelR = pulseR * 0.42;
         const labelGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, labelR);
         labelGrad.addColorStop(0, vz.color2);
@@ -1359,13 +1828,11 @@ export function initStudio() {
         ctx.arc(cx, cy, labelR, 0, Math.PI * 2);
         ctx.fill();
 
-        // Lỗ trục giữa đĩa
         ctx.fillStyle = '#0a0d0f';
         ctx.beginPath();
         ctx.arc(cx, cy, pulseR * 0.08, 0, Math.PI * 2);
         ctx.fill();
 
-        // Biểu tượng nốt nhạc vàng óng / trắng neon
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold ' + Math.round(labelR * 0.7) + 'px "Be Vietnam Pro",sans-serif';
         ctx.textAlign = 'center';
@@ -1374,15 +1841,14 @@ export function initStudio() {
       }
       ctx.restore();
 
-      // Viền sáng mỏng bảo vệ mép logo
       ctx.beginPath();
       ctx.arc(cx, cy, pulseR, 0, Math.PI * 2);
       ctx.strokeStyle = 'rgba(255,255,255,0.45)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
+    // 12. VẠCH SÓNG ÂM CHẠY NGANG (OSCILLOSCOPE WAVE)
     } else if (vz.type === 'wave') {
-      // Vạch sóng âm chạy ngang (Oscilloscope / Waveform)
       const totalW = Math.min(W * 0.95, W * 0.9 * vz.size);
       const startX = cx - totalW / 2;
       const endX = cx + totalW / 2;
@@ -1398,7 +1864,6 @@ export function initStudio() {
         points.push({ x, y });
       }
 
-      // Vùng phủ mờ gradient dưới sóng
       const gradFill = ctx.createLinearGradient(0, cy - maxAmp, 0, cy + maxAmp);
       gradFill.addColorStop(0, vz.color);
       gradFill.addColorStop(1, 'transparent');
@@ -1408,15 +1873,12 @@ export function initStudio() {
       ctx.fillStyle = gradFill;
       ctx.beginPath();
       ctx.moveTo(points[0].x, cy);
-      for (let i = 0; i < points.length; i++) {
-        ctx.lineTo(points[i].x, points[i].y);
-      }
+      for (let i = 0; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
       ctx.lineTo(points[points.length - 1].x, cy);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
 
-      // Đường cong sóng uốn lượn mượt mà
       ctx.beginPath();
       ctx.moveTo(points[0].x, points[0].y);
       for (let i = 1; i < points.length - 1; i++) {
@@ -1434,6 +1896,265 @@ export function initStudio() {
     }
 
     ctx.restore();
+  }
+
+  /* ---------- BỘ MẪU SÓNG NHẠC (1-CLICK PRESETS) & ĐỒNG BỘ GIAO DIỆN ---------- */
+  interface VizPresetConfig {
+    name: string;
+    desc: string;
+    icon: string;
+    type: 'bars' | 'mirror' | 'circle' | 'wave' | 'dots' | 'ribbon' | 'ring' | 'ecg' | 'polygon' | 'stereo' | 'flame' | 'blob' | 'mountain';
+    color: string;
+    color2: string;
+    colorMode: 'solid' | 'gradient' | 'rainbow';
+    y: number;
+    x: number;
+    size: number;
+    sens: number;
+    bars: number;
+    glow: boolean;
+  }
+
+  const VIZ_PRESETS: Record<string, VizPresetConfig> = {
+    tiktok: {
+      name: 'TikTok Viral',
+      desc: 'Equalizer cột đứng sắc nét neon xanh hồng với hạt đỉnh rơi',
+      icon: '📊',
+      type: 'bars',
+      color: '#00f0ff',
+      color2: '#ff007f',
+      colorMode: 'gradient',
+      y: 82,
+      x: 50,
+      size: 1.0,
+      sens: 1.2,
+      bars: 32,
+      glow: true
+    },
+    lofi: {
+      name: 'Lofi Chill',
+      desc: 'Dải lụa mềm mại 3 tầng uốn lượn êm dịu theo giai điệu',
+      icon: '✨',
+      type: 'ribbon',
+      color: '#a78bfa',
+      color2: '#38bdf8',
+      colorMode: 'gradient',
+      y: 78,
+      x: 50,
+      size: 1.1,
+      sens: 1.0,
+      bars: 32,
+      glow: true
+    },
+    vinyl: {
+      name: 'Đĩa Than 360',
+      desc: 'Vòng tròn đĩa than vintage tỏa tia 360 độ quanh tâm avatar',
+      icon: '💿',
+      type: 'circle',
+      color: '#f59e0b',
+      color2: '#ec4899',
+      colorMode: 'gradient',
+      y: 50,
+      x: 50,
+      size: 1.0,
+      sens: 1.15,
+      bars: 36,
+      glow: true
+    },
+    ecg: {
+      name: 'Nhịp Tim ECG',
+      desc: 'Đường điện tim Neon vút cao theo từng nhịp đập của tiếng Bass',
+      icon: '💓',
+      type: 'ecg',
+      color: '#ff0055',
+      color2: '#ff9900',
+      colorMode: 'gradient',
+      y: 80,
+      x: 50,
+      size: 1.05,
+      sens: 1.3,
+      bars: 32,
+      glow: true
+    },
+    edm: {
+      name: 'Xung Kích EDM',
+      desc: 'Sóng vòng tròn xung kích nở bung dồn dập theo nhịp Drop',
+      icon: '⚡',
+      type: 'ring',
+      color: '#00f0ff',
+      color2: '#a855f7',
+      colorMode: 'gradient',
+      y: 50,
+      x: 50,
+      size: 1.1,
+      sens: 1.35,
+      bars: 32,
+      glow: true
+    },
+    stereo: {
+      name: 'Viền Stereo 2 Bên',
+      desc: 'Cột sóng áp sát hai mép video trái phải đối xứng sang trọng',
+      icon: '↔️',
+      type: 'stereo',
+      color: '#06b6d4',
+      color2: '#3b82f6',
+      colorMode: 'gradient',
+      y: 50,
+      x: 50,
+      size: 1.0,
+      sens: 1.25,
+      bars: 28,
+      glow: true
+    },
+    cyber: {
+      name: 'Lục Giác Cyber',
+      desc: 'Lõi lục giác năng lượng viễn tưởng với các tia bắn góc cạnh',
+      icon: '⬢',
+      type: 'polygon',
+      color: '#10b981',
+      color2: '#06b6d4',
+      colorMode: 'gradient',
+      y: 50,
+      x: 50,
+      size: 0.95,
+      sens: 1.2,
+      bars: 36,
+      glow: true
+    },
+    led: {
+      name: 'Ma Trận LED',
+      desc: 'Bóng LED tròn xếp tầng retro phong cách máy trộn âm thanh',
+      icon: '🎛️',
+      type: 'dots',
+      color: '#eab308',
+      color2: '#ef4444',
+      colorMode: 'gradient',
+      y: 82,
+      x: 50,
+      size: 1.0,
+      sens: 1.15,
+      bars: 32,
+      glow: false
+    },
+    flame: {
+      name: 'Ngọn Lửa Cyber',
+      desc: 'Các ngọn lửa âm thanh bùng cháy rung rinh theo tiết tấu',
+      icon: '🔥',
+      type: 'flame',
+      color: '#f97316',
+      color2: '#ef4444',
+      colorMode: 'gradient',
+      y: 85,
+      x: 50,
+      size: 1.0,
+      sens: 1.25,
+      bars: 32,
+      glow: true
+    },
+    mountain: {
+      name: 'Dãy Núi Synthwave',
+      desc: 'Rặng núi 3D đa tầng phong cách Synthwave thập niên 80',
+      icon: '⛰️',
+      type: 'mountain',
+      color: '#ec4899',
+      color2: '#8b5cf6',
+      colorMode: 'gradient',
+      y: 82,
+      x: 50,
+      size: 1.05,
+      sens: 1.2,
+      bars: 32,
+      glow: true
+    },
+    blob: {
+      name: 'Giọt Nước Liquid',
+      desc: 'Khối chất lỏng âm thanh biến dạng đàn hồi cực kỳ cuốn hút',
+      icon: '💧',
+      type: 'blob',
+      color: '#06b6d4',
+      color2: '#8b5cf6',
+      colorMode: 'gradient',
+      y: 50,
+      x: 50,
+      size: 1.0,
+      sens: 1.2,
+      bars: 32,
+      glow: true
+    },
+    mirror: {
+      name: 'Gương Đối Xứng',
+      desc: 'Thanh equalizer lật trên dưới cân đối, thích hợp video nằm ngang',
+      icon: '🪞',
+      type: 'mirror',
+      color: '#3b82f6',
+      color2: '#8b5cf6',
+      colorMode: 'gradient',
+      y: 80,
+      x: 50,
+      size: 1.0,
+      sens: 1.2,
+      bars: 36,
+      glow: true
+    },
+    wave: {
+      name: 'Sóng Biển Mượt',
+      desc: 'Vạch sóng âm dao động ký mềm mại lan tỏa toàn màn hình',
+      icon: '〰️',
+      type: 'wave',
+      color: '#14b8a6',
+      color2: '#3b82f6',
+      colorMode: 'gradient',
+      y: 80,
+      x: 50,
+      size: 1.0,
+      sens: 1.2,
+      bars: 32,
+      glow: true
+    }
+  };
+
+  function syncVizControlsToState() {
+    const vz = S.viz;
+    const vzTypeEl = $('#vizType') as HTMLSelectElement | null; if (vzTypeEl) vzTypeEl.value = vz.type;
+    const vzColorEl = $('#vizColor') as HTMLInputElement | null; if (vzColorEl) vzColorEl.value = vz.color;
+    const vzColor2El = $('#vizColor2') as HTMLInputElement | null; if (vzColor2El) vzColor2El.value = vz.color2;
+    const vzColorModeEl = $('#vizColorMode') as HTMLSelectElement | null; if (vzColorModeEl) vzColorModeEl.value = vz.colorMode;
+    const vzBarsEl = $('#vizBars') as HTMLSelectElement | null; if (vzBarsEl) vzBarsEl.value = String(vz.bars);
+    const vzYEl = $('#vizY') as HTMLInputElement | null; if (vzYEl) vzYEl.value = String(vz.y);
+    const vzXEl = $('#vizX') as HTMLInputElement | null; if (vzXEl) vzXEl.value = String(vz.x);
+    const vzSizeEl = $('#vizSize') as HTMLInputElement | null; if (vzSizeEl) vzSizeEl.value = String(vz.size);
+    const vzSensEl = $('#vizSens') as HTMLInputElement | null; if (vzSensEl) vzSensEl.value = String(vz.sens);
+    const vzGlowEl = $('#vizGlow') as HTMLInputElement | null; if (vzGlowEl) vzGlowEl.checked = vz.glow;
+    const vzLogoBox = $('#vizLogoBox'); if (vzLogoBox) vzLogoBox.hidden = !(vz.type === 'circle' || vz.type === 'polygon' || vz.type === 'blob');
+    const vzYLbl = $('#vizYLbl'); if (vzYLbl) vzYLbl.textContent = vz.y + '%';
+    const vzXLbl = $('#vizXLbl'); if (vzXLbl) vzXLbl.textContent = vz.x + '%';
+    const vzSizeLbl = $('#vizSizeLbl'); if (vzSizeLbl) vzSizeLbl.textContent = vz.size.toFixed(2) + 'x';
+    const vzSensLbl = $('#vizSensLbl'); if (vzSensLbl) vzSensLbl.textContent = vz.sens.toFixed(1) + 'x';
+    const c2Box = $('#vizColor2Box'); if (c2Box) c2Box.style.opacity = vz.colorMode === 'solid' ? '0.35' : '1';
+
+    // Đánh dấu active cho thẻ preset tương ứng
+    document.querySelectorAll('.viz-preset-btn').forEach((btn: any) => {
+      const isMatch = btn.dataset.presetType === vz.type;
+      btn.classList.toggle('active-preset', isMatch);
+    });
+  }
+
+  function applyVizPreset(key: string) {
+    const p = VIZ_PRESETS[key];
+    if (!p) return;
+    S.viz.type = p.type;
+    S.viz.color = p.color;
+    S.viz.color2 = p.color2;
+    S.viz.colorMode = p.colorMode;
+    S.viz.y = p.y;
+    S.viz.x = p.x;
+    S.viz.size = p.size;
+    S.viz.sens = p.sens;
+    S.viz.bars = p.bars;
+    S.viz.glow = p.glow;
+    syncVizControlsToState();
+    draw();
+    toast(`Đã áp dụng mẫu sóng: ${p.name}`);
   }
 
   /* ---------- LYRIC: BỘ 3 BƯỚC (NHẬP LỜI - CĂN GIỜ - CHỈNH SỬA) ---------- */
@@ -1563,8 +2284,14 @@ export function initStudio() {
   function updateUndoRedoUI() {
     const btnUndo = $('#btnTlUndo') as HTMLButtonElement | null;
     const btnRedo = $('#btnTlRedo') as HTMLButtonElement | null;
-    if (btnUndo) btnUndo.disabled = tlUndoStack.length === 0;
-    if (btnRedo) btnRedo.disabled = tlRedoStack.length === 0;
+    const btnTopUndo = $('#btnTopUndo') as HTMLButtonElement | null;
+    const btnTopRedo = $('#btnTopRedo') as HTMLButtonElement | null;
+    const noUndo = tlUndoStack.length === 0;
+    const noRedo = tlRedoStack.length === 0;
+    if (btnUndo) btnUndo.disabled = noUndo;
+    if (btnRedo) btnRedo.disabled = noRedo;
+    if (btnTopUndo) btnTopUndo.disabled = noUndo;
+    if (btnTopRedo) btnTopRedo.disabled = noRedo;
   }
 
   function pushTimelineHistory() {
@@ -3408,8 +4135,24 @@ export function initStudio() {
 
       a += c.dur;
     });
+
+    // Nút dấu cộng (+) ở cuối track CLIP để thêm nhanh clip
+    h += '<div class="tl-add-clip-tile" id="btnTlAddClipEnd" style="left:' + (a * pps + 4) + 'px" title="Thêm ảnh hoặc video mới">'
+      + '<span class="tl-add-clip-plus">+</span><span>Thêm clip</span>'
+      + '</div>';
+
     const clipsEl = $('#clips');
-    if (clipsEl) clipsEl.innerHTML = h;
+    if (clipsEl) {
+      clipsEl.innerHTML = h;
+      const addClipBtn = clipsEl.querySelector('#btnTlAddClipEnd');
+      if (addClipBtn) {
+        addClipBtn.addEventListener('click', (e: any) => {
+          e.stopPropagation();
+          const fMedia = $('#fileMedia2') as HTMLInputElement | null;
+          if (fMedia) fMedia.click();
+        });
+      }
+    }
 
     // Render Audio Lane (#alane)
     const al = $('#alane');
@@ -3446,7 +4189,7 @@ export function initStudio() {
           const cx = cvEl.getContext('2d');
           if (!cx) return;
           cx.clearRect(0, 0, w, 44);
-          cx.fillStyle = b.id === S.selAudioId ? '#00f0ff' : '#2dd4bf';
+          cx.fillStyle = b.id === S.selAudioId ? '#00f0ff' : '#38bdf8';
           if (peaks.length) {
             for (let px = 0; px < w; px++) {
               const fileSec = b.srcIn + (px / w) * b.dur;
@@ -3521,7 +4264,14 @@ export function initStudio() {
           }
         });
       } else {
-        al.innerHTML = '<span class="empty">Chưa có nhạc. Thêm ở tab Nhạc hoặc kéo thả file vào đây.</span>';
+        al.innerHTML = '<div class="empty-audio-lane" id="btnEmptyAudioAdd" title="Bấm để chọn file nhạc"><span class="empty-audio-icon">♫</span><span>+ Kéo thả hoặc bấm để thêm nhạc</span></div>';
+        const addBtn = al.querySelector('#btnEmptyAudioAdd');
+        if (addBtn) {
+          addBtn.addEventListener('click', () => {
+            const fi = $('#fileAudio') as HTMLInputElement | null;
+            if (fi) fi.click();
+          });
+        }
       }
     }
 
@@ -3555,57 +4305,220 @@ export function initStudio() {
   function updateInspector() {
     const c = selClip();
     const ab = selAudioBlock();
-    const ids = ['iDur', 'iIn', 'iOut', 'iFit', 'iFx', 'iTr', 'iTrD', 'iCol', 'iL', 'iR', 'iDup', 'iDel'];
-    ids.forEach(i => { const el = $('#' + i); if (el) el.disabled = !c; });
-    const btnPrevClipTr = $('#btnPreviewClipTr');
-    if (btnPrevClipTr) btnPrevClipTr.disabled = !c;
-    const btnApplyClipTrAll = $('#btnApplyClipTrAll');
-    if (btnApplyClipTrAll) btnApplyClipTrAll.disabled = !c;
+    const ly = selLyr();
 
-    if (ab) {
-      $('#iName').textContent = 'Đoạn nhạc: ' + (A.name || 'Nhạc') + ' [' + fmt(ab.dur) + '] (' + fmt(ab.srcIn) + ' ➔ ' + fmt(ab.srcOut) + ')';
-    } else {
-      $('#iName').textContent = c ? c.name : 'Chọn một clip hoặc đoạn nhạc trên timeline để chỉnh.';
-    }
-    if (!c) return;
-    const v = c.type === 'video';
-    $('#gDur').hidden = v;
-    $('#gIn').hidden = !v;
-    $('#gOut').hidden = !v;
-    $('#iDur').value = c.dur.toFixed(2);
-    $('#iIn').value = c.srcIn.toFixed(1);
-    $('#iOut').value = c.srcOut.toFixed(1);
-    $('#iOut').max = c.full;
-    $('#iFit').value = c.fit;
-    $('#iFx').value = c.fx;
+    const ctxClip = $('#ctxClip');
+    const ctxAudio = $('#ctxAudio');
+    const ctxLyric = $('#ctxLyric');
+    const ctxProject = $('#ctxProject');
+    const rightTitle = $('#rightPanelTitle');
+    const rightIcon = $('#rightPanelIcon');
 
-    const cIdx = S.clips.findIndex(x => x.id === c.id);
-    if (cIdx <= 0) {
-      if ($('#iTr')) { $('#iTr').value = 'none'; $('#iTr').disabled = true; $('#iTr').title = 'Clip đầu tiên không có chuyển cảnh vào'; }
-      if ($('#iTrD')) { $('#iTrD').disabled = true; }
-      if (btnPrevClipTr) btnPrevClipTr.disabled = true;
-      if (btnApplyClipTrAll) btnApplyClipTrAll.disabled = true;
-    } else {
-      const prev = S.clips[cIdx - 1];
-      const maxTrD = Math.max(0.1, Math.min(3.0, prev.dur * 0.5, c.dur * 0.5));
-      c.trDur = Math.min(c.trDur || 1.0, maxTrD);
-      if ($('#iTr')) { $('#iTr').disabled = false; $('#iTr').value = c.tr; $('#iTr').title = ''; }
-      if ($('#iTrD')) {
-        $('#iTrD').disabled = false;
-        $('#iTrD').max = maxTrD.toFixed(1);
-        $('#iTrD').value = c.trDur.toFixed(1);
+    if (c) {
+      if (ctxClip) ctxClip.hidden = false;
+      if (ctxAudio) ctxAudio.hidden = true;
+      if (ctxLyric) ctxLyric.hidden = true;
+      if (ctxProject) ctxProject.hidden = true;
+      if (rightTitle) rightTitle.textContent = 'Thuộc tính Clip: ' + c.name;
+      if (rightIcon) rightIcon.textContent = c.type === 'video' ? '🎬' : '🖼️';
+
+      const clipBadge = $('#ctxClipBadge');
+      if (clipBadge) clipBadge.textContent = c.type === 'video' ? '🎬 Video' : '🖼️ Ảnh';
+      const clipName = $('#ctxClipName');
+      if (clipName) clipName.textContent = c.name;
+
+      const v = c.type === 'video';
+      const gDur = $('#gDur');
+      const gIn = $('#gIn');
+      const gOut = $('#gOut');
+      if (gDur) gDur.hidden = v;
+      if (gIn) gIn.hidden = !v;
+      if (gOut) gOut.hidden = !v;
+
+      const iDur = $('#iDur') as HTMLInputElement | null;
+      if (iDur) iDur.value = c.dur.toFixed(2);
+      const iIn = $('#iIn') as HTMLInputElement | null;
+      if (iIn) iIn.value = c.srcIn.toFixed(1);
+      const iOut = $('#iOut') as HTMLInputElement | null;
+      if (iOut) {
+        iOut.value = c.srcOut.toFixed(1);
+        iOut.max = String(c.full);
       }
-      if (btnPrevClipTr) btnPrevClipTr.disabled = false;
-      if (btnApplyClipTrAll) btnApplyClipTrAll.disabled = false;
+      const iFit = $('#iFit') as HTMLSelectElement | null;
+      if (iFit) iFit.value = c.fit;
+      const iFx = $('#iFx') as HTMLSelectElement | null;
+      if (iFx) iFx.value = c.fx;
+
+      const cIdx = S.clips.findIndex(x => x.id === c.id);
+      const iTr = $('#iTr') as HTMLSelectElement | null;
+      const iTrD = $('#iTrD') as HTMLInputElement | null;
+      const btnPrevClipTr = $('#btnPreviewClipTr') as HTMLButtonElement | null;
+      const btnApplyClipTrAll = $('#btnApplyClipTrAll') as HTMLButtonElement | null;
+
+      if (cIdx <= 0) {
+        if (iTr) { iTr.value = 'none'; iTr.disabled = true; iTr.title = 'Clip đầu tiên không có chuyển cảnh vào'; }
+        if (iTrD) iTrD.disabled = true;
+        if (btnPrevClipTr) btnPrevClipTr.disabled = true;
+        if (btnApplyClipTrAll) btnApplyClipTrAll.disabled = true;
+      } else {
+        const prev = S.clips[cIdx - 1];
+        const maxTrD = Math.max(0.1, Math.min(3.0, prev.dur * 0.5, c.dur * 0.5));
+        c.trDur = Math.min(c.trDur || 1.0, maxTrD);
+        if (iTr) { iTr.disabled = false; iTr.value = c.tr; iTr.title = ''; }
+        if (iTrD) {
+          iTrD.disabled = false;
+          iTrD.max = maxTrD.toFixed(1);
+          iTrD.value = c.trDur.toFixed(1);
+        }
+        if (btnPrevClipTr) btnPrevClipTr.disabled = false;
+        if (btnApplyClipTrAll) btnApplyClipTrAll.disabled = false;
+      }
+
+      const iCol = $('#iCol') as HTMLSelectElement | null;
+      if (iCol) iCol.value = c.color;
+      const rFit = $('#rFit') as HTMLSelectElement | null;
+      if (rFit) rFit.value = c.fit;
+
+    } else if (ab) {
+      if (ctxClip) ctxClip.hidden = true;
+      if (ctxAudio) ctxAudio.hidden = false;
+      if (ctxLyric) ctxLyric.hidden = true;
+      if (ctxProject) ctxProject.hidden = true;
+      if (rightTitle) rightTitle.textContent = 'Thuộc tính Nhạc: ' + (A.name || 'Nhạc');
+      if (rightIcon) rightIcon.textContent = '♫';
+
+      const audioName = $('#ctxAudioName');
+      if (audioName) audioName.textContent = (A.name || 'File nhạc') + ' [' + fmt(ab.dur) + ']';
+
+      const aVol = $('#aVol') as HTMLInputElement | null;
+      if (aVol) aVol.value = String(A.vol);
+
+      const aFadeIn = $('#aFadeIn') as HTMLInputElement | null;
+      const aFadeOut = $('#aFadeOut') as HTMLInputElement | null;
+      if (aFadeIn) aFadeIn.value = String(A.fadeIn);
+      if (aFadeOut) aFadeOut.value = String(A.fadeOut);
+
+    } else if (ly) {
+      if (ctxClip) ctxClip.hidden = true;
+      if (ctxAudio) ctxAudio.hidden = true;
+      if (ctxLyric) ctxLyric.hidden = false;
+      if (ctxProject) ctxProject.hidden = true;
+      const lIdx = S.lyr.findIndex(item => item.id === ly.id);
+      if (rightTitle) rightTitle.textContent = `Câu #${lIdx + 1}: ${ly.text}`;
+      if (rightIcon) rightIcon.textContent = '📝';
+
+      const lyrBadge = $('#inspLyrBadge');
+      if (lyrBadge) lyrBadge.textContent = `Câu #${lIdx + 1}`;
+      const lyrDurBadge = $('#inspLyrDurBadge');
+      const endT = ly.endT || (ly.t + 3.0);
+      if (lyrDurBadge) lyrDurBadge.textContent = `${(endT - ly.t).toFixed(2)}s (${fmt(ly.t)} - ${fmt(endT)})`;
+
+      const txtEl = $('#inspLyrText') as HTMLTextAreaElement | null;
+      if (txtEl && document.activeElement !== txtEl) txtEl.value = ly.text;
+      const startEl = $('#inspLyrStart') as HTMLInputElement | null;
+      if (startEl && document.activeElement !== startEl) startEl.value = ly.t.toFixed(2);
+      const endEl = $('#inspLyrEnd') as HTMLInputElement | null;
+      if (endEl && document.activeElement !== endEl) endEl.value = endT.toFixed(2);
+
+      const colorDef = $('#inspLyrColorDef') as HTMLInputElement | null;
+      const colorEl = $('#inspLyrColor') as HTMLInputElement | null;
+      if (colorDef) colorDef.checked = !ly.color;
+      if (colorEl) {
+        colorEl.value = ly.color || S.style.color || '#ffffff';
+        colorEl.disabled = !ly.color;
+      }
+
+      const hiDef = $('#inspLyrHiDef') as HTMLInputElement | null;
+      const hiEl = $('#inspLyrHi') as HTMLInputElement | null;
+      if (hiDef) hiDef.checked = !ly.hi;
+      if (hiEl) {
+        hiEl.value = ly.hi || S.style.hi || '#ffd23f';
+        hiEl.disabled = !ly.hi;
+      }
+
+      const sizeEl = $('#inspLyrSize') as HTMLInputElement | null;
+      if (sizeEl && document.activeElement !== sizeEl) sizeEl.value = String(ly.size || 0);
+
+    } else {
+      // Không chọn gì -> Cài đặt dự án
+      if (ctxClip) ctxClip.hidden = true;
+      if (ctxAudio) ctxAudio.hidden = true;
+      if (ctxLyric) ctxLyric.hidden = true;
+      if (ctxProject) ctxProject.hidden = false;
+      if (rightTitle) rightTitle.textContent = 'Cài đặt Dự án';
+      if (rightIcon) rightIcon.textContent = '⚙️';
+
+      const rFadeIn = $('#rFadeIn') as HTMLInputElement | null;
+      const rFadeOut = $('#rFadeOut') as HTMLInputElement | null;
+      const rFadeInVal = $('#rFadeInVal');
+      const rFadeOutVal = $('#rFadeOutVal');
+      if (rFadeIn) rFadeIn.value = String(A.fadeIn);
+      if (rFadeOut) rFadeOut.value = String(A.fadeOut);
+      if (rFadeInVal) rFadeInVal.textContent = A.fadeIn.toFixed(1) + 's';
+      if (rFadeOutVal) rFadeOutVal.textContent = A.fadeOut.toFixed(1) + 's';
     }
 
-    $('#iCol').value = c.color;
+    document.querySelectorAll('.speed-btn').forEach(btn => {
+      btn.classList.toggle('active', Math.abs(parseFloat((btn as any).dataset.speed || '1') - (S.speed || 1)) < 0.01);
+    });
   }
+
+  function renderMediaDrawerCards() {
+    const container = $('#mediaDrawerCards');
+    if (!container) return;
+    if (!S.clips.length) {
+      container.innerHTML = '<div class="p-4 text-center text-xs text-slate-400">Chưa có tệp media nào. Bấm nút "Import media" phía trên để thêm ảnh hoặc video.</div>';
+      return;
+    }
+    let html = '';
+    S.clips.forEach((c) => {
+      const isSel = c.id === S.sel;
+      html += '<div class="media-drawer-card ' + (isSel ? 'selected' : '') + '" data-cid="' + c.id + '" title="' + esc(c.name) + '">'
+        + '<div class="media-drawer-thumb-wrap">'
+        + '<img src="' + (c.thumb || c.url) + '" alt="' + esc(c.name) + '" class="media-drawer-thumb" />'
+        + '<span class="media-drawer-type-badge">' + (c.type === 'video' ? '🎬' : '🖼️') + '</span>'
+        + '</div>'
+        + '<div class="media-drawer-info">'
+        + '<span class="media-drawer-title" title="' + esc(c.name) + '">' + esc(c.name) + '</span>'
+        + '<span class="media-drawer-meta">' + c.dur.toFixed(1) + 's</span>'
+        + '</div>'
+        + '<button type="button" class="media-drawer-add-btn" data-add-cid="' + c.id + '" title="Thêm vào timeline">+</button>'
+        + '</div>';
+    });
+    container.innerHTML = html;
+
+    container.querySelectorAll('.media-drawer-card').forEach((cardEl: any) => {
+      cardEl.addEventListener('click', (e: MouseEvent) => {
+        const addBtn = (e.target as HTMLElement).closest('.media-drawer-add-btn');
+        const cid = +(cardEl.dataset.cid || 0);
+        if (addBtn) {
+          e.stopPropagation();
+          const targetClip = S.clips.find(x => x.id === cid);
+          if (targetClip) {
+            pushTimelineHistory();
+            const copy = cloneClip(targetClip);
+            copy.name = targetClip.name + ' (thêm)';
+            S.clips.push(copy);
+            S.sel = copy.id;
+            refreshAll();
+            toast('Đã thêm "' + targetClip.name + '" vào timeline');
+          }
+          return;
+        }
+        S.sel = cid;
+        S.selAudioId = null;
+        S.selLyrId = null;
+        refreshAll();
+      });
+    });
+  }
+
   function refreshAll() {
     if (S.sel && !selClip()) S.sel = S.clips[0]?.id ?? null;
     S.t = clamp(S.t, 0, total());
     syncVideos(S.t, false);
     renderTimeline();
+    renderMediaDrawerCards();
     draw();
   }
   function fill(sel: string, obj: Record<string, string>) {
@@ -4083,41 +4996,320 @@ export function initStudio() {
     const sFontEl = $('#sFont'); if (sFontEl) sFontEl.innerHTML = FONTS.map(f => '<option value="' + f + '" style="font-family:\'' + f + '\'">' + f + '</option>').join('');
 
     // Khởi tạo giá trị ban đầu cho các ô điều khiển sóng nhạc
-    const vzInit = S.viz;
-    const vzTypeEl = $('#vizType') as HTMLSelectElement | null; if (vzTypeEl) vzTypeEl.value = vzInit.type;
-    const vzColorEl = $('#vizColor') as HTMLInputElement | null; if (vzColorEl) vzColorEl.value = vzInit.color;
-    const vzColor2El = $('#vizColor2') as HTMLInputElement | null; if (vzColor2El) vzColor2El.value = vzInit.color2;
-    const vzColorModeEl = $('#vizColorMode') as HTMLSelectElement | null; if (vzColorModeEl) vzColorModeEl.value = vzInit.colorMode;
-    const vzBarsEl = $('#vizBars') as HTMLSelectElement | null; if (vzBarsEl) vzBarsEl.value = String(vzInit.bars);
-    const vzYEl = $('#vizY') as HTMLInputElement | null; if (vzYEl) vzYEl.value = String(vzInit.y);
-    const vzXEl = $('#vizX') as HTMLInputElement | null; if (vzXEl) vzXEl.value = String(vzInit.x);
-    const vzSizeEl = $('#vizSize') as HTMLInputElement | null; if (vzSizeEl) vzSizeEl.value = String(vzInit.size);
-    const vzSensEl = $('#vizSens') as HTMLInputElement | null; if (vzSensEl) vzSensEl.value = String(vzInit.sens);
-    const vzGlowEl = $('#vizGlow') as HTMLInputElement | null; if (vzGlowEl) vzGlowEl.checked = vzInit.glow;
-    const vzLogoBox = $('#vizLogoBox'); if (vzLogoBox) vzLogoBox.hidden = vzInit.type !== 'circle';
-    const vzYLbl = $('#vizYLbl'); if (vzYLbl) vzYLbl.textContent = vzInit.y + '%';
-    const vzXLbl = $('#vizXLbl'); if (vzXLbl) vzXLbl.textContent = vzInit.x + '%';
-    const vzSizeLbl = $('#vizSizeLbl'); if (vzSizeLbl) vzSizeLbl.textContent = vzInit.size.toFixed(2) + 'x';
-    const vzSensLbl = $('#vizSensLbl'); if (vzSensLbl) vzSensLbl.textContent = vzInit.sens.toFixed(1) + 'x';
+    syncVizControlsToState();
 
-    document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
-      document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', String(x === b)));
-      document.querySelectorAll('[data-pane]').forEach((p: any) => { p.hidden = p.dataset.pane !== (b as any).dataset.tab; });
-      if ((b as any).dataset.tab === 'lyric') {
+    const switchTab = (tabName: string) => {
+      document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', String((x as any).dataset.tab === tabName)));
+      document.querySelectorAll('.nav-dock-btn').forEach(x => {
+        if ((x as any).dataset.tab === tabName) x.classList.add('active');
+        else x.classList.remove('active');
+      });
+      document.querySelectorAll('[data-pane]').forEach((p: any) => { p.hidden = p.dataset.pane !== tabName; });
+      const drawer = $('#studioDrawer');
+      if (drawer) drawer.classList.remove('collapsed');
+
+      const titleMap: Record<string, string> = {
+        media: 'Thư viện media',
+        music: 'Quản lý âm thanh',
+        visual: 'Hiệu ứng sóng nhạc',
+        lyric: 'Căn chỉnh Lyric',
+        text: 'Định dạng chữ',
+        inspector: 'Thuộc tính phần tử'
+      };
+      const titleEl = $('#drawerTitle');
+      if (titleEl && titleMap[tabName]) titleEl.textContent = titleMap[tabName];
+
+      if (tabName === 'lyric') {
         renderLyricUI();
       }
+      if (tabName === 'media') {
+        renderMediaDrawerCards();
+      }
+    };
+
+    document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
+      switchTab((b as any).dataset.tab);
     }));
+
+    document.querySelectorAll('.nav-dock-btn[data-tab]').forEach(b => b.addEventListener('click', () => {
+      switchTab((b as any).dataset.tab);
+    }));
+
+    safeClick('#btnToggleDrawer', () => {
+      const drawer = $('#studioDrawer');
+      if (drawer) {
+        drawer.classList.toggle('collapsed');
+        fitStage();
+      }
+    });
+
+    // Bật / Thu gọn panel phải
+    const toggleRightPanel = () => {
+      const rp = $('#studioRightPanel');
+      if (rp) {
+        rp.classList.toggle('collapsed');
+        fitStage();
+      }
+    };
+    safeClick('#btnToggleRightPanel', toggleRightPanel);
+    safeClick('#btnToggleRightPanelTransport', toggleRightPanel);
+
+    // Toàn màn hình preview
+    safeClick('#btnFullscreen', () => {
+      const vp = document.querySelector('.stage-viewport') as HTMLElement | null;
+      if (!vp) return;
+      if (!document.fullscreenElement) {
+        vp.requestFullscreen?.().then(() => {
+          fitStage();
+          draw();
+        }).catch(() => {});
+      } else {
+        document.exitFullscreen?.().then(() => {
+          fitStage();
+          draw();
+        }).catch(() => {});
+      }
+    });
+    document.addEventListener('fullscreenchange', () => {
+      setTimeout(() => { fitStage(); draw(); }, 60);
+    });
+
+    // Thanh kéo chia giữa Preview và Timeline để tự đổi độ cao
+    const tlHandle = $('#tlResizeHandle');
+    if (tlHandle) {
+      let isResizing = false;
+      let startY = 0;
+      let startH = 200;
+      tlHandle.addEventListener('pointerdown', (e: PointerEvent) => {
+        isResizing = true;
+        startY = e.clientY;
+        const tlEl = document.querySelector('.studio-timeline') as HTMLElement | null;
+        startH = tlEl ? tlEl.clientHeight : 200;
+        tlHandle.setPointerCapture(e.pointerId);
+        e.preventDefault();
+      });
+      tlHandle.addEventListener('pointermove', (e: PointerEvent) => {
+        if (!isResizing) return;
+        const delta = startY - e.clientY;
+        const newH = clamp(startH + delta, 150, 420);
+        document.documentElement.style.setProperty('--tl-height', `${newH}px`);
+        fitStage();
+      });
+      const endResize = (e: PointerEvent) => {
+        if (isResizing) {
+          isResizing = false;
+          try { tlHandle.releasePointerCapture(e.pointerId); } catch (err) {}
+          fitStage();
+        }
+      };
+      tlHandle.addEventListener('pointerup', endResize);
+      tlHandle.addEventListener('pointercancel', endResize);
+    }
+
+    // Các nút trong thuộc tính đoạn nhạc (Contextual Audio)
+    safeClick('#btnCtxCloseGaps', closeAudioGaps);
+    safeClick('#btnCtxDelAudio', () => {
+      if (S.selAudioId != null) {
+        const idx = S.audioBlocks.findIndex(b => b.id === S.selAudioId);
+        if (idx >= 0) {
+          pushTimelineHistory();
+          S.audioBlocks.splice(idx, 1);
+          S.selAudioId = null;
+          autoFitImagesToMusic();
+          refreshAll();
+          toast('Đã xóa đoạn nhạc.');
+        }
+      }
+    });
+
+    // Các ô nhập trong thuộc tính câu Lyric (Contextual Lyric)
+    safeInput('#inspLyrText', (e: any) => {
+      const ly = selLyr();
+      if (!ly) return;
+      ly.text = e.target.value;
+      syncLyrToEditor(false);
+    });
+    safeChange('#inspLyrStart', (e: any) => {
+      const ly = selLyr();
+      if (!ly) return;
+      const v = Math.max(0, parseFloat(e.target.value) || 0);
+      ly.t = parseFloat(v.toFixed(2));
+      S.lyr.sort((a, b) => a.t - b.t);
+      syncLyrToEditor(true);
+    });
+    safeChange('#inspLyrEnd', (e: any) => {
+      const ly = selLyr();
+      if (!ly) return;
+      const v = Math.max(ly.t + 0.1, parseFloat(e.target.value) || (ly.t + 1));
+      ly.endT = parseFloat(v.toFixed(2));
+      syncLyrToEditor(true);
+    });
+    safeChange('#inspLyrColorDef', (e: any) => {
+      const ly = selLyr();
+      if (!ly) return;
+      if (e.target.checked) {
+        delete ly.color;
+      } else {
+        ly.color = ($('#inspLyrColor') as HTMLInputElement)?.value || '#ffffff';
+      }
+      updateInspector();
+      draw();
+    });
+    safeInput('#inspLyrColor', (e: any) => {
+      const ly = selLyr();
+      if (!ly) return;
+      ly.color = e.target.value;
+      const chk = $('#inspLyrColorDef') as HTMLInputElement | null;
+      if (chk) chk.checked = false;
+      draw();
+    });
+    safeChange('#inspLyrHiDef', (e: any) => {
+      const ly = selLyr();
+      if (!ly) return;
+      if (e.target.checked) {
+        delete ly.hi;
+      } else {
+        ly.hi = ($('#inspLyrHi') as HTMLInputElement)?.value || '#ffd23f';
+      }
+      updateInspector();
+      draw();
+    });
+    safeInput('#inspLyrHi', (e: any) => {
+      const ly = selLyr();
+      if (!ly) return;
+      ly.hi = e.target.value;
+      const chk = $('#inspLyrHiDef') as HTMLInputElement | null;
+      if (chk) chk.checked = false;
+      draw();
+    });
+    safeChange('#inspLyrSize', (e: any) => {
+      const ly = selLyr();
+      if (!ly) return;
+      const sz = parseFloat(e.target.value) || 0;
+      if (sz > 0) ly.size = sz;
+      else delete ly.size;
+      draw();
+    });
+    safeClick('#btnInspSplitLyr', splitLyricAtPlayhead);
+    safeClick('#btnInspMergeNext', mergeLyricWithNext);
+    safeClick('#btnInspAddLyr', addLyricAtPlayhead);
+    safeClick('#btnInspDelLyr', deleteLyricLine);
+
+    // Cài đặt mờ dần đầu/cuối video
+    safeInput('#rFadeIn', (e: any) => {
+      pushTimelineHistory();
+      A.fadeIn = Math.max(0, parseFloat(e.target.value) || 0);
+      const valEl = $('#rFadeInVal');
+      if (valEl) valEl.textContent = A.fadeIn.toFixed(1) + 's';
+      applyVol(A.isPreviewing || A.isTrimPreviewing);
+      renderTimeline();
+    });
+
+    safeInput('#rFadeOut', (e: any) => {
+      pushTimelineHistory();
+      A.fadeOut = Math.max(0, parseFloat(e.target.value) || 0);
+      const valEl = $('#rFadeOutVal');
+      if (valEl) valEl.textContent = A.fadeOut.toFixed(1) + 's';
+      applyVol(A.isPreviewing || A.isTrimPreviewing);
+      renderTimeline();
+    });
+
+    document.querySelectorAll('.filter-chip-btn[data-col]').forEach(b => {
+      b.addEventListener('click', () => {
+        const c = selClip();
+        if (!c) return toast('Hãy chọn một clip trên timeline trước.');
+        pushTimelineHistory();
+        c.color = (b as any).dataset.col || 'none';
+        refreshAll();
+        updateInspector();
+        toast('Đã áp dụng bộ lọc: ' + (COL[c.color] || c.color));
+      });
+    });
+
+    document.querySelectorAll('.fx-chip-btn[data-fx]').forEach(b => {
+      b.addEventListener('click', () => {
+        const c = selClip();
+        if (!c) return toast('Hãy chọn một clip trên timeline trước.');
+        pushTimelineHistory();
+        c.fx = (b as any).dataset.fx || 'none';
+        refreshAll();
+        updateInspector();
+        toast('Đã áp dụng chuyển động: ' + (FX[c.fx] || c.fx));
+      });
+    });
+
+    safeChange('#rFit', (e: any) => {
+      const c = selClip();
+      if (!c) return toast('Hãy chọn một clip trên timeline trước.');
+      pushTimelineHistory();
+      c.fit = e.target.value;
+      refreshAll();
+      updateInspector();
+      toast('Đã áp dụng khung: ' + (c.fit === 'cover' ? 'Phủ kín khung' : 'Vừa ảnh, nền mờ'));
+    });
+
+    document.querySelectorAll('.speed-btn[data-speed]').forEach(b => {
+      b.addEventListener('click', () => {
+        const rate = parseFloat((b as any).dataset.speed || '1.0');
+        setSpeed(rate);
+        document.querySelectorAll('.speed-btn').forEach(x => {
+          x.classList.toggle('active', x === b);
+        });
+      });
+    });
+
+    // Project title rename
+    safeChange('#projectTitleInput', (e: any) => {
+      const val = (e.target.value || '').trim() || 'Dự án chưa đặt tên';
+      document.title = val + ' - Lyric Video Studio';
+      toast('Đã đổi tên dự án: ' + val);
+    });
+
+    // Transport buttons: 5s back & forward, top undo & redo, timeline zoom in & out
+    safeClick('#bStepBack5', () => seek(S.t - 5));
+    safeClick('#bStepFwd5', () => seek(S.t + 5));
+    safeClick('#btnTopUndo', undoTimeline);
+    safeClick('#btnTopRedo', redoTimeline);
+    safeClick('#btnTlZoomIn', () => {
+      S.pps = Math.min(200, S.pps + 15);
+      const z = $('#zoom') as HTMLInputElement | null;
+      if (z) z.value = String(S.pps);
+      renderTimeline();
+    });
+    safeClick('#btnTlZoomOut', () => {
+      S.pps = Math.max(15, S.pps - 15);
+      const z = $('#zoom') as HTMLInputElement | null;
+      if (z) z.value = String(S.pps);
+      renderTimeline();
+    });
 
     const setOrient = (o: string) => {
       S.orient = o;
       $('#oV')?.setAttribute('aria-pressed', String(o === 'v'));
       $('#oH')?.setAttribute('aria-pressed', String(o === 'h'));
+      $('#oV2')?.setAttribute('aria-pressed', String(o === 'v'));
+      $('#oH2')?.setAttribute('aria-pressed', String(o === 'h'));
       setSize();
       draw();
     };
     safeClick('#oV', () => setOrient('v'));
     safeClick('#oH', () => setOrient('h'));
-    safeChange('#res', (e: any) => { S.res = +e.target.value; setSize(); draw(); });
+    safeClick('#oV2', () => setOrient('v'));
+    safeClick('#oH2', () => setOrient('h'));
+    safeChange('#res', (e: any) => {
+      S.res = +e.target.value;
+      const r2 = $('#res2') as HTMLSelectElement | null;
+      if (r2) r2.value = e.target.value;
+      setSize();
+      draw();
+    });
+    safeChange('#res2', (e: any) => {
+      S.res = +e.target.value;
+      const r1 = $('#res') as HTMLSelectElement | null;
+      if (r1) r1.value = e.target.value;
+      setSize();
+      draw();
+    });
 
     ['#fileMedia', '#fileMedia2'].forEach(s => $(s)?.addEventListener('change', async (e: any) => {
       await addFiles(e.target.files);
@@ -4566,30 +5758,43 @@ export function initStudio() {
       e.target.value = '';
     });
 
-    // sóng nhạc (hiệu ứng theo nhạc)
+    // sóng nhạc (hiệu ứng theo nhạc & mẫu sóng nhanh)
+    document.querySelectorAll('.viz-preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const pKey = (btn as HTMLElement).dataset.presetKey;
+        if (pKey && VIZ_PRESETS[pKey]) {
+          applyVizPreset(pKey);
+        }
+      });
+    });
+
+    document.querySelectorAll('.viz-palette-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const c1 = (btn as HTMLElement).dataset.c1;
+        const c2 = (btn as HTMLElement).dataset.c2;
+        if (c1) S.viz.color = c1;
+        if (c2) S.viz.color2 = c2;
+        syncVizControlsToState();
+        draw();
+        toast('Đã áp dụng bảng màu: ' + ((btn as HTMLElement).title || ''));
+      });
+    });
+
     safeChange('#vizType', (e: any) => {
       S.viz.type = e.target.value;
-      const logoBox = $('#vizLogoBox');
-      if (logoBox) logoBox.hidden = S.viz.type !== 'circle';
-      // Tự động gợi ý vị trí thích hợp nếu người dùng chưa đổi vị trí
-      const yInput = $('#vizY') as HTMLInputElement | null;
-      const yLbl = $('#vizYLbl');
-      if (S.viz.type === 'circle' && S.viz.y === 82) {
+      const isCenterType = ['circle', 'polygon', 'ring', 'blob'].includes(S.viz.type);
+      if (isCenterType && S.viz.y === 82) {
         S.viz.y = 50;
-        if (yInput) yInput.value = '50';
-        if (yLbl) yLbl.textContent = '50%';
-      } else if (S.viz.type !== 'circle' && S.viz.y === 50) {
+      } else if (!isCenterType && S.viz.y === 50) {
         S.viz.y = 82;
-        if (yInput) yInput.value = '82';
-        if (yLbl) yLbl.textContent = '82%';
       }
+      syncVizControlsToState();
       draw();
     });
 
     safeChange('#vizColorMode', (e: any) => {
       S.viz.colorMode = e.target.value;
-      const c2Box = $('#vizColor2Box');
-      if (c2Box) c2Box.style.opacity = S.viz.colorMode === 'solid' ? '0.35' : '1';
+      syncVizControlsToState();
       draw();
     });
 
@@ -4624,22 +5829,37 @@ export function initStudio() {
 
     safeClick('#btnVizPosBottom', () => {
       S.viz.y = 82;
-      const el = $('#vizY') as HTMLInputElement | null; if (el) el.value = '82';
-      const lbl = $('#vizYLbl'); if (lbl) lbl.textContent = '82%';
+      syncVizControlsToState();
       draw();
     });
 
     safeClick('#btnVizPosCenter', () => {
       S.viz.y = 50;
-      const el = $('#vizY') as HTMLInputElement | null; if (el) el.value = '50';
-      const lbl = $('#vizYLbl'); if (lbl) lbl.textContent = '50%';
+      syncVizControlsToState();
       draw();
     });
 
     safeClick('#btnVizPosTop', () => {
       S.viz.y = 20;
-      const el = $('#vizY') as HTMLInputElement | null; if (el) el.value = '20';
-      const lbl = $('#vizYLbl'); if (lbl) lbl.textContent = '20%';
+      syncVizControlsToState();
+      draw();
+    });
+
+    safeClick('#btnVizPosLeft', () => {
+      S.viz.x = 25;
+      syncVizControlsToState();
+      draw();
+    });
+
+    safeClick('#btnVizPosMidX', () => {
+      S.viz.x = 50;
+      syncVizControlsToState();
+      draw();
+    });
+
+    safeClick('#btnVizPosRight', () => {
+      S.viz.x = 75;
+      syncVizControlsToState();
       draw();
     });
 
@@ -5694,6 +6914,7 @@ export function initStudio() {
   // Khởi động
   bind();
   loadSample();
+  renderMediaDrawerCards();
   setSize();
   setVolume(A.vol);
   const tlFadeIn = $('#tlFadeIn') as HTMLSelectElement | null;
