@@ -1639,3 +1639,323 @@ canvas#cv {
   z-index: 60;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
+
+/* ========================================================
+   THANH ĐIỀU KHIỂN CHẾ ĐỘ TOÀN MÀN HÌNH PREVIEW (FULLSCREEN)
+   ======================================================== */
+.fs-overlay {
+  display: none !important;
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+}
+
+:fullscreen .fs-overlay,
+.stage-viewport:fullscreen .fs-overlay,
+.stage-viewport:-webkit-full-screen .fs-overlay,
+.stage-viewport.is-fullscreen .fs-overlay {
+  display: flex !important;
+}
+
+.stage-viewport:fullscreen,
+.stage-viewport:-webkit-full-screen,
+.stage-viewport.is-fullscreen {
+  background: #000000 !important;
+  padding: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+}
+
+/* Nút ✕ ở góc trên phải */
+.fs-top-close-btn {
+  pointer-events: auto;
+  align-self: flex-end;
+  margin: 20px 24px 0 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(18, 18, 24, 0.7);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  transition: opacity 0.3s ease, transform 0.3s ease, background 0.15s ease, color 0.15s ease;
+  z-index: 1002;
+}
+
+.fs-top-close-btn:hover {
+  background: rgba(239, 68, 68, 0.85);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+  transform: scale(1.08);
+}
+
+.fs-top-close-btn:active {
+  transform: scale(0.95);
+}
+
+/* Thanh điều khiển đè lên phần đáy của video (nền gradient đen mờ từ dưới lên) */
+.fs-bottom-bar {
+  pointer-events: auto;
+  width: 100%;
+  padding: 48px 32px 24px 32px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.65) 55%, transparent 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  z-index: 1002;
+}
+
+/* Tự ẩn / hiện sau 3 giây không rê chuột */
+.stage-viewport.fs-idle,
+.stage-viewport.fs-idle * {
+  cursor: none !important;
+}
+
+.stage-viewport.fs-idle .fs-top-close-btn {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-20px);
+}
+
+.stage-viewport.fs-idle .fs-bottom-bar {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(24px);
+}
+
+/* Thanh tiến trình (seek bar) kéo được */
+.fs-progress-wrap {
+  position: relative;
+  width: 100%;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+}
+
+.fs-progress-container {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.25);
+  transition: height 0.15s ease;
+}
+
+.fs-progress-wrap:hover .fs-progress-container {
+  height: 8px;
+}
+
+.fs-progress-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #14b8a6 0%, #00f0ff 100%);
+  box-shadow: 0 0 12px rgba(20, 184, 166, 0.7);
+  pointer-events: none;
+}
+
+.fs-progress-thumb {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2.5px solid #00f0ff;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.8), 0 2px 6px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%) scale(0.9);
+  transition: transform 0.15s ease;
+  pointer-events: none;
+}
+
+.fs-progress-wrap:hover .fs-progress-thumb {
+  transform: translate(-50%, -50%) scale(1.25);
+}
+
+.fs-progress-tooltip {
+  position: absolute;
+  bottom: 28px;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.95);
+  color: #ffffff;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  pointer-events: none;
+  display: none;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+/* Hàng nút điều khiển & thời gian & âm lượng */
+.fs-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 16px;
+}
+
+.fs-ctrl-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fs-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.fs-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #00f0ff;
+  transform: scale(1.06);
+}
+
+.fs-btn:active {
+  transform: scale(0.95);
+}
+
+.fs-btn.fs-btn-play {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #14b8a6 0%, #00f0ff 100%);
+  border: none;
+  color: #04171a;
+  box-shadow: 0 0 16px rgba(20, 184, 166, 0.55);
+}
+
+.fs-btn.fs-btn-play:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 24px rgba(0, 240, 255, 0.85);
+  color: #04171a;
+}
+
+.fs-time-box {
+  margin-left: 8px;
+}
+
+.fs-timecode {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+/* Hộp chỉnh âm lượng toàn màn hình */
+.fs-vol-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 4px 12px;
+  border-radius: 9999px;
+}
+
+.fs-btn.fs-btn-mute {
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+}
+
+.fs-btn.fs-btn-mute:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #00f0ff;
+}
+
+.fs-vol-slider {
+  width: 80px;
+  height: 5px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  cursor: pointer;
+  outline: none;
+}
+
+.fs-vol-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #00f0ff;
+  border: 2px solid #ffffff;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(0, 240, 255, 0.6);
+}
+
+.fs-vol-val {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: #e2e8f0;
+  min-width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Nút Thoát toàn màn hình */
+.fs-exit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.fs-exit-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #00f0ff;
+  transform: translateY(-1px);
+}
+
+.fs-exit-btn:active {
+  transform: translateY(0);
+}

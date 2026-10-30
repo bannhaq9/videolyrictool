@@ -261,6 +261,10 @@ export function initStudio() {
     t = Math.max(0, t);
     return String(Math.floor(t / 60)).padStart(2, '0') + ':' + (t % 60).toFixed(2).padStart(5, '0');
   };
+  const fmtSec = (t: number) => {
+    t = Math.max(0, Math.floor(t));
+    return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
+  };
 
   let toastTimer: any = 0;
   function toast(m: string) {
@@ -3891,6 +3895,74 @@ export function initStudio() {
     updateActiveLyricCard(S.t);
     raf = requestAnimationFrame(tick);
   }
+  /* ---------- toàn màn hình preview helpers ---------- */
+  let fsIdleTimer: any = null;
+  const isFsActive = () => !!document.fullscreenElement || !!$('#stageViewport')?.classList.contains('is-fullscreen');
+
+  function showFsControls() {
+    const vp = $('#stageViewport');
+    if (vp) vp.classList.remove('fs-idle');
+    if (fsIdleTimer) {
+      clearTimeout(fsIdleTimer);
+      fsIdleTimer = null;
+    }
+  }
+
+  function scheduleFsIdle() {
+    if (fsIdleTimer) {
+      clearTimeout(fsIdleTimer);
+      fsIdleTimer = null;
+    }
+    if (S.playing && isFsActive()) {
+      fsIdleTimer = setTimeout(() => {
+        if (S.playing && isFsActive()) {
+          $('#stageViewport')?.classList.add('fs-idle');
+        }
+      }, 3000);
+    }
+  }
+
+  function onFsUserActivity() {
+    if (!isFsActive()) return;
+    showFsControls();
+    scheduleFsIdle();
+  }
+
+  function exitFullscreen() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    }
+    const vp = $('#stageViewport');
+    if (vp) {
+      vp.classList.remove('is-fullscreen', 'fs-idle');
+    }
+    if (fsIdleTimer) {
+      clearTimeout(fsIdleTimer);
+      fsIdleTimer = null;
+    }
+    setTimeout(() => { fitStage(); draw(); }, 60);
+  }
+
+  function toggleFullscreen() {
+    const vp = $('#stageViewport');
+    if (!vp) return;
+    if (!document.fullscreenElement) {
+      vp.requestFullscreen?.().then(() => {
+        vp.classList.add('is-fullscreen');
+        onFsUserActivity();
+        fitStage();
+        draw();
+      }).catch(() => {
+        vp.classList.toggle('is-fullscreen');
+        onFsUserActivity();
+        fitStage();
+        draw();
+      });
+    } else {
+      exitFullscreen();
+    }
+  }
+
   function play() {
     if (S.playing || !S.clips.length) return;
     stopAllPreviews();
@@ -3901,6 +3973,7 @@ export function initStudio() {
     startAudio();
     raf = requestAnimationFrame(tick);
     updateUI();
+    if (isFsActive()) scheduleFsIdle();
   }
   function halt() {
     S.playing = false;
@@ -3910,16 +3983,19 @@ export function initStudio() {
     S.clips.forEach(c => {
       if (c.type === 'video' && !c.el.paused) c.el.pause();
     });
+    showFsControls();
   }
   function pause() {
     halt();
     syncVideos(S.t, false);
     draw();
     updateUI();
+    showFsControls();
   }
   function finish() {
     halt();
     updateUI();
+    showFsControls();
     const cb = endCb;
     endCb = null;
     if (cb) cb();
@@ -3996,31 +4072,40 @@ export function initStudio() {
     const stageVolLbl = $('#stageVolLbl');
     const bMute = $('#bMute');
 
+    const fsVol = $('#fsVolSlider') as HTMLInputElement | null;
+    const fsVolVal = $('#fsVolVal');
+    const btnFsMute = $('#btnFsMute');
+
     if (aVol && fromInputId !== 'aVol') {
       aVol.value = String(clamped);
     }
     if (stageVol && fromInputId !== 'stageVol') {
       stageVol.value = String(clamped);
     }
+    if (fsVol && fromInputId !== 'fsVolSlider') {
+      fsVol.value = String(clamped);
+    }
+
     const percent = Math.round(clamped * 100);
     if (stageVolLbl) {
       stageVolLbl.textContent = percent + '%';
     }
+    if (fsVolVal) {
+      fsVolVal.textContent = percent + '%';
+    }
+
+    const muteIcon = clamped === 0 ? ICON_VOL_MUTE : clamped <= 0.5 ? ICON_VOL_LOW : ICON_VOL_HIGH;
+    const muteTitle = clamped === 0 ? 'Bật tiếng (phím M)' : 'Tắt tiếng (phím M)';
 
     if (bMute) {
-      if (clamped === 0) {
-        bMute.innerHTML = ICON_VOL_MUTE;
-        bMute.setAttribute('aria-label', 'Bật tiếng (phím M)');
-        bMute.setAttribute('title', 'Bật tiếng (phím M)');
-      } else if (clamped <= 0.5) {
-        bMute.innerHTML = ICON_VOL_LOW;
-        bMute.setAttribute('aria-label', 'Tắt tiếng (phím M)');
-        bMute.setAttribute('title', 'Tắt tiếng (phím M)');
-      } else {
-        bMute.innerHTML = ICON_VOL_HIGH;
-        bMute.setAttribute('aria-label', 'Tắt tiếng (phím M)');
-        bMute.setAttribute('title', 'Tắt tiếng (phím M)');
-      }
+      bMute.innerHTML = muteIcon;
+      bMute.setAttribute('aria-label', muteTitle);
+      bMute.setAttribute('title', muteTitle);
+    }
+    if (btnFsMute) {
+      btnFsMute.innerHTML = muteIcon;
+      btnFsMute.setAttribute('aria-label', muteTitle);
+      btnFsMute.setAttribute('title', muteTitle);
     }
 
     applyVol(A.isPreviewing || A.isTrimPreviewing);
@@ -4069,6 +4154,28 @@ export function initStudio() {
         bPlay.setAttribute('title', isPl ? 'Tạm dừng (Phím Space)' : 'Phát (Phím Space)');
       }
     }
+
+    // Đồng bộ nút Play/Pause và thời gian toàn màn hình
+    const btnFsPlay = $('#btnFsPlay');
+    if (btnFsPlay) {
+      const isPl = S.playing && !isAnyPreviewActive();
+      const plStr = isPl ? '1' : '0';
+      if (btnFsPlay.dataset.playing !== plStr) {
+        btnFsPlay.dataset.playing = plStr;
+        btnFsPlay.innerHTML = isPl ? ICON_PAUSE : ICON_PLAY;
+        btnFsPlay.setAttribute('aria-label', isPl ? 'Tạm dừng (Phím Space hoặc K)' : 'Phát (Phím Space hoặc K)');
+        btnFsPlay.setAttribute('title', isPl ? 'Tạm dừng (Phím Space hoặc K)' : 'Phát (Phím Space hoặc K)');
+      }
+    }
+    const fsTimeLbl = $('#fsTimeLbl');
+    if (fsTimeLbl) fsTimeLbl.textContent = fmtSec(S.t) + ' / ' + fmtSec(T);
+
+    const fsFill = $('#fsProgressFill');
+    const fsThumb = $('#fsProgressThumb');
+    const pct = T > 0 ? clamp((S.t / T) * 100, 0, 100) : 0;
+    if (fsFill) fsFill.style.width = pct.toFixed(2) + '%';
+    if (fsThumb) fsThumb.style.left = pct.toFixed(2) + '%';
+
     const ph = $('#ph');
     if (ph) ph.style.left = (S.t * S.pps) + 'px';
     if (S.playing) {
@@ -4909,7 +5016,9 @@ export function initStudio() {
     const isInput = ['INPUT', 'SELECT', 'TEXTAREA'].includes(tg) || (e.target as HTMLElement).isContentEditable;
     if (isInput) return;
 
-    // Phím Escape: Đóng modal danh sách phím tắt
+    const isFs = isFsActive();
+
+    // Phím Escape: Thoát toàn màn hình hoặc đóng modal phím tắt
     if (e.code === 'Escape' || e.key === 'Escape') {
       const modal = $('#shortcutsModal');
       if (modal && !modal.hidden) {
@@ -4917,13 +5026,42 @@ export function initStudio() {
         modal.hidden = true;
         return;
       }
+      if (isFs) {
+        e.preventDefault();
+        exitFullscreen();
+        return;
+      }
+    }
+
+    // Phím K: Toggle Phát / Tạm dừng
+    if (e.code === 'KeyK' || e.key === 'k' || e.key === 'K') {
+      e.preventDefault();
+      togglePlay();
+      if (isFs) onFsUserActivity();
+      return;
+    }
+
+    // Phím mũi tên Trái / Phải: Lùi / Tiến 5 giây
+    if (e.code === 'ArrowLeft') {
+      e.preventDefault();
+      seek(S.t - 5);
+      toast('Lùi 5s (' + fmtSec(S.t) + ')');
+      if (isFs) onFsUserActivity();
+      return;
+    }
+    if (e.code === 'ArrowRight') {
+      e.preventDefault();
+      seek(S.t + 5);
+      toast('Tiến 5s (' + fmtSec(S.t) + ')');
+      if (isFs) onFsUserActivity();
+      return;
     }
 
     // Phím Ctrl+Z / Ctrl+Y (hoặc Ctrl+Shift+Z, Cmd+Z/Y) cho Hoàn tác / Làm lại
     if ((e.ctrlKey || e.metaKey) && !e.altKey) {
       if (e.key === 'z' || e.key === 'Z') {
         e.preventDefault();
-        if (currentLyrStep === 2) {
+        if (currentLyrStep === 2 && !isFs) {
           tapUndoLine();
         } else {
           if (e.shiftKey) redoTimeline();
@@ -4942,6 +5080,7 @@ export function initStudio() {
     if (e.code === 'KeyM' || e.key === 'm' || e.key === 'M') {
       e.preventDefault();
       toggleMute();
+      if (isFs) onFsUserActivity();
       return;
     }
 
@@ -4959,12 +5098,13 @@ export function initStudio() {
       return;
     }
 
-    // Phím mũi tên (▲ / ▼): Chỉnh âm lượng 5%
+    // Phím mũi tên (▲ / ▼): Chỉnh âm lượng (10% khi toàn màn hình, 5% khi bình thường)
     if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
       e.preventDefault();
-      const delta = e.code === 'ArrowUp' ? 0.05 : -0.05;
+      const delta = isFs ? (e.code === 'ArrowUp' ? 0.1 : -0.1) : (e.code === 'ArrowUp' ? 0.05 : -0.05);
       setVolume(A.vol + delta);
       toast('Âm lượng: ' + Math.round(A.vol * 100) + '%');
+      if (isFs) onFsUserActivity();
       return;
     }
 
@@ -4974,12 +5114,13 @@ export function initStudio() {
       e.preventDefault();
       e.stopPropagation();
 
-      if (currentLyrStep === 2) {
+      if (currentLyrStep === 2 && !isFs) {
         tapMarkNow();
         return;
       }
 
       togglePlay();
+      if (isFs) onFsUserActivity();
       return;
     }
   }
@@ -5055,22 +5196,109 @@ export function initStudio() {
     safeClick('#btnToggleRightPanelTransport', toggleRightPanel);
 
     // Toàn màn hình preview
-    safeClick('#btnFullscreen', () => {
-      const vp = document.querySelector('.stage-viewport') as HTMLElement | null;
-      if (!vp) return;
-      if (!document.fullscreenElement) {
-        vp.requestFullscreen?.().then(() => {
-          fitStage();
-          draw();
-        }).catch(() => {});
-      } else {
-        document.exitFullscreen?.().then(() => {
-          fitStage();
-          draw();
-        }).catch(() => {});
+    safeClick('#btnFullscreen', toggleFullscreen);
+    safeClick('#btnFsExit', exitFullscreen);
+    safeClick('#btnFsCloseTop', exitFullscreen);
+
+    safeClick('#btnFsStart', () => { seek(0); onFsUserActivity(); });
+    safeClick('#btnFsBack5', () => { seek(S.t - 5); onFsUserActivity(); });
+    safeClick('#btnFsPlay', () => { togglePlay(); onFsUserActivity(); });
+    safeClick('#btnFsFwd5', () => { seek(S.t + 5); onFsUserActivity(); });
+    safeClick('#btnFsStop', () => { stopPlayback(); onFsUserActivity(); });
+    safeClick('#btnFsMute', () => { toggleMute(); onFsUserActivity(); });
+    safeInput('#fsVolSlider', (e: any) => { setVolume(+e.target.value, 'fsVolSlider'); onFsUserActivity(); });
+
+    // Bấm một lần vào vùng video để phát/tạm dừng (khi đang toàn màn hình)
+    const vpEl = $('#stageViewport');
+    if (vpEl) {
+      vpEl.addEventListener('pointermove', onFsUserActivity);
+      vpEl.addEventListener('pointerdown', onFsUserActivity);
+      vpEl.addEventListener('touchstart', onFsUserActivity, { passive: true });
+
+      vpEl.addEventListener('click', (e: MouseEvent) => {
+        if (!isFsActive()) return;
+        const target = e.target as HTMLElement;
+        if (target.closest('#fsBottomBar') || target.closest('#btnFsCloseTop') || target.closest('button') || target.closest('input')) {
+          return;
+        }
+        togglePlay();
+        onFsUserActivity();
+      });
+    }
+
+    // Thanh tiến trình (seek bar) trong toàn màn hình: kéo hoặc bấm bất kỳ để tua
+    const fsProgressWrap = $('#fsProgressWrap');
+    const fsProgressContainer = $('#fsProgressContainer');
+    const fsTooltip = $('#fsProgressTooltip');
+    let isFsScrubbing = false;
+
+    const seekToFsEvent = (e: PointerEvent) => {
+      if (!fsProgressContainer) return;
+      const rect = fsProgressContainer.getBoundingClientRect();
+      const dur = total();
+      if (dur <= 0) return;
+      const ratio = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+      const targetT = ratio * dur;
+      seek(targetT);
+      if (fsTooltip) {
+        fsTooltip.style.display = 'block';
+        fsTooltip.style.left = (ratio * 100).toFixed(1) + '%';
+        fsTooltip.textContent = fmtSec(targetT);
       }
-    });
+    };
+
+    if (fsProgressWrap) {
+      fsProgressWrap.addEventListener('pointerdown', (e: PointerEvent) => {
+        e.stopPropagation();
+        isFsScrubbing = true;
+        try { fsProgressWrap.setPointerCapture(e.pointerId); } catch (err) {}
+        seekToFsEvent(e);
+        onFsUserActivity();
+      });
+
+      fsProgressWrap.addEventListener('pointermove', (e: PointerEvent) => {
+        if (isFsScrubbing) {
+          seekToFsEvent(e);
+          onFsUserActivity();
+        } else if (fsProgressContainer) {
+          const rect = fsProgressContainer.getBoundingClientRect();
+          const dur = total();
+          const ratio = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+          if (fsTooltip) {
+            fsTooltip.style.display = 'block';
+            fsTooltip.style.left = (ratio * 100).toFixed(1) + '%';
+            fsTooltip.textContent = fmtSec(ratio * dur);
+          }
+        }
+      });
+
+      fsProgressWrap.addEventListener('pointerleave', () => {
+        if (!isFsScrubbing && fsTooltip) {
+          fsTooltip.style.display = 'none';
+        }
+      });
+
+      const endFsScrub = (e: PointerEvent) => {
+        if (isFsScrubbing) {
+          isFsScrubbing = false;
+          try { fsProgressWrap.releasePointerCapture(e.pointerId); } catch (err) {}
+          if (fsTooltip) fsTooltip.style.display = 'none';
+          onFsUserActivity();
+        }
+      };
+      fsProgressWrap.addEventListener('pointerup', endFsScrub);
+      fsProgressWrap.addEventListener('pointercancel', endFsScrub);
+    }
+
     document.addEventListener('fullscreenchange', () => {
+      const v = $('#stageViewport');
+      if (document.fullscreenElement) {
+        v?.classList.add('is-fullscreen');
+        onFsUserActivity();
+      } else {
+        v?.classList.remove('is-fullscreen', 'fs-idle');
+        if (fsIdleTimer) { clearTimeout(fsIdleTimer); fsIdleTimer = null; }
+      }
       setTimeout(() => { fitStage(); draw(); }, 60);
     });
 
@@ -6943,5 +7171,6 @@ export function initStudio() {
     document.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('resize', onResize);
     clearTimeout(toastTimer);
+    clearTimeout(fsIdleTimer);
   };
 }

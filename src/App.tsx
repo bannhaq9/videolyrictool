@@ -520,9 +520,94 @@ export default function App() {
 
         {/* 4. PREVIEW TRUNG TÂM & THANH ĐIỀU KHIỂN PHÁT */}
         <div className="studio-center">
-          <div className="stage-viewport">
+          <div className="stage-viewport" id="stageViewport">
             <div className="stage" id="stage">
               <canvas id="cv" width="720" height="1280"></canvas>
+            </div>
+
+            {/* THANH ĐIỀU KHIỂN CHẾ ĐỘ TOÀN MÀN HÌNH (FULLSCREEN OVERLAY) */}
+            <div className="fs-overlay" id="fsOverlay">
+              {/* Nút ✕ ở góc trên phải */}
+              <button type="button" className="fs-top-close-btn" id="btnFsCloseTop" title="Thoát toàn màn hình (Phím Esc)">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+
+              {/* Thanh điều khiển đè lên phần đáy của video */}
+              <div className="fs-bottom-bar" id="fsBottomBar">
+                {/* 1. Thanh tiến trình (seek bar) kéo được */}
+                <div className="fs-progress-wrap" id="fsProgressWrap" title="Kéo hoặc bấm để tua video">
+                  <div className="fs-progress-container" id="fsProgressContainer">
+                    <div className="fs-progress-bg"></div>
+                    <div className="fs-progress-fill" id="fsProgressFill" style={{ width: '0%' }}></div>
+                    <div className="fs-progress-thumb" id="fsProgressThumb" style={{ left: '0%' }}></div>
+                  </div>
+                  <div className="fs-progress-tooltip" id="fsProgressTooltip">00:00</div>
+                </div>
+
+                {/* 2. Hàng nút điều khiển & thời gian & âm lượng & thoát toàn màn hình */}
+                <div className="fs-controls-row">
+                  {/* Nhóm trái: các nút phát */}
+                  <div className="fs-ctrl-group fs-ctrl-left">
+                    <button type="button" className="fs-btn" id="btnFsStart" title="Về đầu (00:00)">
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+                      </svg>
+                    </button>
+
+                    <button type="button" className="fs-btn" id="btnFsBack5" title="Lùi 5 giây (Mũi tên trái)">
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 4v6h6M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                      </svg>
+                    </button>
+
+                    <button type="button" className="fs-btn fs-btn-play" id="btnFsPlay" title="Phát / Tạm dừng (Phím Space hoặc K)" aria-label="Phát">
+                      <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                        <path d="M8 5v14l11-7z"/>
+                      </svg>
+                    </button>
+
+                    <button type="button" className="fs-btn" id="btnFsFwd5" title="Tiến 5 giây (Mũi tên phải)">
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M23 4v6h-6M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                      </svg>
+                    </button>
+
+                    <button type="button" className="fs-btn" id="btnFsStop" title="Dừng hẳn và về 00:00">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <rect x="5" y="5" width="14" height="14" rx="2" />
+                      </svg>
+                    </button>
+
+                    {/* Thời gian "00:05 / 00:13" */}
+                    <div className="fs-time-box">
+                      <span className="fs-timecode" id="fsTimeLbl">00:00 / 00:04</span>
+                    </div>
+                  </div>
+
+                  {/* Nhóm phải: Âm lượng + Nút Thoát toàn màn hình */}
+                  <div className="fs-ctrl-group fs-ctrl-right">
+                    <div className="fs-vol-box" title="Âm lượng (Mũi tên lên/xuống, phím M tắt/bật)">
+                      <button type="button" className="fs-btn fs-btn-mute" id="btnFsMute" title="Tắt / Bật tiếng (Phím M)">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                          <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                        </svg>
+                      </button>
+                      <input type="range" id="fsVolSlider" min="0" max="1" step="0.01" defaultValue="1" className="fs-vol-slider" aria-label="Âm lượng toàn màn hình" />
+                      <span className="fs-vol-val" id="fsVolVal">100%</span>
+                    </div>
+
+                    <button type="button" className="fs-exit-btn" id="btnFsExit" title="Thoát toàn màn hình (Phím Esc)">
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-14v3h3v2h-5V5h2z"/>
+                      </svg>
+                      <span>Thoát toàn màn hình</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
