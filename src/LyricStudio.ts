@@ -116,8 +116,20 @@ export function initStudio() {
   };
   const SAMPLE_LYR = '[00:00.50] Sáng nay nắng lên rất hiền\n[00:03.00] Ta đi qua phố quen\n[00:05.50] Gió đưa mùi hoa sữa\n[00:08.00] Một ngày mới bắt đầu';
 
+  interface MediaItem {
+    id: number;
+    type: 'image' | 'video';
+    name: string;
+    el: any;
+    url: string;
+    full: number;
+    thumb: string;
+    sample?: boolean;
+  }
+
   interface Clip {
     id: number;
+    mediaId: number;
     type: 'image' | 'video';
     name: string;
     el: any;
@@ -140,6 +152,7 @@ export function initStudio() {
     t: number;
     endT: number;
     text: string;
+    lane?: number; // 0, 1, 2, 3
     color?: string;
     hi?: string;
     size?: number;
@@ -156,11 +169,13 @@ export function initStudio() {
   const S = {
     orient: 'v',
     res: 720,
+    mediaList: [] as MediaItem[],
     clips: [] as Clip[],
     sel: null as number | null,
     selLyrId: null as number | null,
     audioBlocks: [] as AudioBlock[],
     selAudioId: null as number | null,
+    activeTrack: 'clip' as 'clip' | 'audio' | 'lyric',
     t: 0,
     playing: false,
     sample: true,
@@ -180,7 +195,9 @@ export function initStudio() {
       y: 74,
       next: true,
       upper: false,
-      anim: 'fade' as 'fade' | 'rise' | 'pop' | 'type' | 'slide'
+      anim: 'fade' as 'fade' | 'rise' | 'pop' | 'type' | 'slide',
+      lane2Scale: 80, // % cỡ chữ hàng 2 trở đi (mặc định 80%)
+      lane2Color: '#cbd5e1' // Màu chữ hàng 2 trở đi
     },
     title: { text: '', dur: 3 },
     def: { dur: 4, fit: 'cover', fx: 'zoomin', tr: 'fade', trDur: 0.6 },
@@ -250,7 +267,7 @@ export function initStudio() {
   (A.el as any).webkitPreservesPitch = true;
   (A.el as any).mozPreservesPitch = true;
 
-  let uid = 0, lyrUid = 0, audioUid = 0, raf = 0, t0 = 0, tbase = 0, endCb: (() => Promise<void> | void) | null = null,
+  let uid = 0, mediaUid = 0, lyrUid = 0, audioUid = 0, raf = 0, t0 = 0, tbase = 0, endCb: (() => Promise<void> | void) | null = null,
       exporting = false, expCancel = false, expBlob: Blob | null = null, expName = '', expRec: MediaRecorder | null = null;
   const cv: HTMLCanvasElement = $('#cv'), ctx = cv.getContext('2d')!;
   const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
@@ -301,6 +318,7 @@ export function initStudio() {
   function newClip(o: Partial<Clip>): Clip {
     return Object.assign({
       id: ++uid,
+      mediaId: o.mediaId || 0,
       type: 'image',
       name: '',
       el: null,
@@ -328,14 +346,13 @@ export function initStudio() {
   };
 
   const total = () => {
-    if (A.loaded && S.audioBlocks.length > 0) {
-      const aEnd = audioTrackEnd();
-      if (aEnd > 0) return Math.max(0.5, aEnd);
-    }
-    return Math.max(0.5, S.clips.reduce((a, c) => a + c.dur, 0));
+    const clipsDur = S.clips.reduce((a, c) => a + c.dur, 0);
+    const aEnd = (A.loaded && S.audioBlocks.length > 0) ? audioTrackEnd() : 0;
+    return Math.max(0.5, clipsDur, aEnd);
   };
 
   function autoFitImagesToMusic(showToast = false) {
+    if (!S.syncWithMusic) return;
     if (!A.loaded || !S.audioBlocks.length) return;
     const targetTotal = total();
     const imgs = S.clips.filter(c => c.type === 'image');
@@ -418,8 +435,27 @@ export function initStudio() {
     const img = new Image();
     img.src = url;
     try { await img.decode(); } catch (e) { await once(img, 'load'); }
-    const c = newClip({ type: 'image', name: f.name, el: img, url, dur: S.def.dur });
-    c.thumb = thumbFrom(img);
+    const thumb = thumbFrom(img);
+    const mItem: MediaItem = {
+      id: ++mediaUid,
+      type: 'image',
+      name: f.name,
+      el: img,
+      url,
+      full: S.def.dur,
+      thumb
+    };
+    S.mediaList.push(mItem);
+
+    const c = newClip({
+      mediaId: mItem.id,
+      type: 'image',
+      name: f.name,
+      el: img,
+      url,
+      dur: S.def.dur,
+      thumb
+    });
     S.clips.push(c);
   }
   async function addVideo(f: File) {
@@ -427,17 +463,43 @@ export function initStudio() {
     const v = makeVideo(url);
     await once(v, 'loadedmetadata');
     const d = v.duration || 1;
-    const c = newClip({ type: 'video', name: f.name, el: v, url, dur: d, srcIn: 0, srcOut: d, full: d, fit: 'cover', fx: 'none', tr: S.def.tr });
     try {
       v.currentTime = Math.min(0.1, d / 2);
       await once(v, 'seeked');
-      c.thumb = thumbFrom(v);
     } catch (e) {}
+    const thumb = thumbFrom(v);
+    const mItem: MediaItem = {
+      id: ++mediaUid,
+      type: 'video',
+      name: f.name,
+      el: v,
+      url,
+      full: d,
+      thumb
+    };
+    S.mediaList.push(mItem);
+
+    const c = newClip({
+      mediaId: mItem.id,
+      type: 'video',
+      name: f.name,
+      el: v,
+      url,
+      dur: d,
+      srcIn: 0,
+      srcOut: d,
+      full: d,
+      fit: 'cover',
+      fx: 'none',
+      tr: S.def.tr,
+      thumb
+    });
     S.clips.push(c);
   }
   function clearSample() {
     if (!S.sample) return;
     S.sample = false;
+    S.mediaList = S.mediaList.filter(m => !m.sample);
     S.clips = S.clips.filter(c => !c.sample);
     const lyrEl = $('#lyr') as HTMLTextAreaElement | null;
     if (lyrEl && lyrEl.value.trim() === SAMPLE_LYR) {
@@ -467,7 +529,7 @@ export function initStudio() {
     }
     if (n && !S.sel) S.sel = S.clips[0]?.id ?? null;
     if (n) S.sel = S.clips[S.clips.length - 1].id;
-    if (A.loaded) autoFitImagesToMusic();
+    if (A.loaded && S.syncWithMusic) autoFitImagesToMusic();
     refreshAll();
   }
   function makeSample(i: number) {
@@ -511,18 +573,34 @@ export function initStudio() {
     return c;
   }
   function loadSample() {
+    S.mediaList = [];
     ['dawn', 'sea', 'dusk', 'meadow'].forEach((_n, i) => {
       const el = makeSample(i);
-      const c = newClip({
+      const name = i === 0 ? 'Hoa nở bên tường.jpg' : ('Ảnh mẫu ' + (i + 1));
+      const thumb = thumbFrom(el);
+      const mItem: MediaItem = {
+        id: ++mediaUid,
         type: 'image',
-        name: i === 0 ? 'Hoa nở bên tường.jpg' : ('Ảnh mẫu ' + (i + 1)),
+        name,
+        el,
+        url: '',
+        full: i === 0 ? 4 : 3,
+        thumb,
+        sample: true
+      };
+      S.mediaList.push(mItem);
+
+      const c = newClip({
+        mediaId: mItem.id,
+        type: 'image',
+        name,
         el,
         dur: i === 0 ? 4 : 3,
         sample: true,
         fx: ['zoomin', 'panl', 'zoomout', 'panr'][i],
-        tr: i ? 'fade' : 'none'
+        tr: i ? 'fade' : 'none',
+        thumb
       });
-      c.thumb = thumbFrom(el);
       S.clips.push(c);
     });
     S.sel = S.clips[0].id;
@@ -544,9 +622,14 @@ export function initStudio() {
         const cx = cropC.getContext('2d')!;
         cx.drawImage(imgArt, 746, 146, 126, 280, 0, 0, 720, 1280);
         if (S.sample && S.clips[0]) {
+          const thumb = thumbFrom(cropC);
           S.clips[0].el = cropC;
-          S.clips[0].thumb = thumbFrom(cropC);
+          S.clips[0].thumb = thumb;
           S.clips[0].name = 'Hoa nở bên tường.jpg';
+          if (S.mediaList[0]) {
+            S.mediaList[0].el = cropC;
+            S.mediaList[0].thumb = thumb;
+          }
           renderTimeline();
           renderMediaDrawerCards();
           draw();
@@ -1127,64 +1210,160 @@ export function initStudio() {
     return th;
   }
   function drawLyrics(t: number) {
-    const ly = S.lyr;
-    if (!ly.length) return;
+    if (!S.lyr.length) return;
     const st = S.style;
-    let idx = -1;
-    for (let i = 0; i < ly.length; i++) {
-      if (ly[i].t <= t) idx = i;
-      else break;
+    const W = cv.width, H = cv.height;
+
+    // Tìm tất cả các câu lyric đang diễn ra tại mốc t
+    const activeItems = S.lyr.filter(item => {
+      const lineEnd = (item.endT && item.endT > item.t) ? item.endT : item.t + 3.0;
+      return t >= item.t && t <= lineEnd && !!item.text;
+    });
+
+    if (!activeItems.length) {
+      // Nếu không có câu nào đang hát và bật tùy chọn xem trước câu kế
+      if (st.next) {
+        const nextItem = S.lyr.find(item => item.t > t && item.t <= t + 2.5);
+        if (nextItem && nextItem.text) {
+          const fs = (nextItem.size && nextItem.size > 0 ? nextItem.size : st.size) / 100 * Math.min(W, H);
+          const yc = H * st.y / 100;
+          drawText(nextItem.text, yc, fs * 0.85, null, 0.45, { color: nextItem.color || st.color });
+        }
+      }
+      return;
     }
-    if (idx < 0) return;
-    const cur = ly[idx], nxt = ly[idx + 1];
-    if (!cur.text) return;
-    const lineEnd = (cur.endT && cur.endT > cur.t) ? cur.endT : (nxt ? nxt.t : cur.t + 4);
-    if (t > lineEnd && (!nxt || nxt.t > lineEnd)) return;
-    const fs = (cur.size && cur.size > 0 ? cur.size : st.size) / 100 * Math.min(cv.width, cv.height);
-    const yc = cv.height * st.y / 100;
-    const fillDur = Math.max(0.2, lineEnd - cur.t);
-    const prog = st.karaoke ? clamp((t - cur.t) / fillDur, 0, 1) : null;
 
-    // Hiệu ứng chữ khi dòng lyric bắt đầu hiện (~0.3 giây)
-    const age = Math.max(0, t - cur.t);
-    const enterDur = 0.3;
-    const k = clamp(age / enterDur, 0, 1);
-    let a = k;
-    let animYc = yc;
-    let animDx = 0;
-    let animScale = 1;
-    let textToDraw = cur.text;
+    // Sắp xếp các câu đang hiển thị theo Hàng (Hàng 1 ở trên, Hàng 2 bên dưới,...)
+    activeItems.sort((a, b) => {
+      const lA = typeof a.lane === 'number' ? a.lane : 0;
+      const lB = typeof b.lane === 'number' ? b.lane : 0;
+      if (lA !== lB) return lA - lB;
+      return a.t - b.t;
+    });
 
-    const animType = st.anim || 'fade';
-    if (k < 1) {
-      if (animType === 'rise') {
-        animYc += (1 - k) * fs * 0.45;
-        a = k;
-      } else if (animType === 'pop') {
-        const bounce = k < 0.65 ? 0.65 + (k / 0.65) * 0.5 : 1.15 - ((k - 0.65) / 0.35) * 0.15;
-        animScale = bounce;
-        a = clamp(k * 2, 0, 1);
-      } else if (animType === 'type') {
-        const count = Math.max(1, Math.floor(cur.text.length * k));
-        textToDraw = cur.text.slice(0, count);
-        a = 1;
-      } else if (animType === 'slide') {
-        animDx = -(1 - k) * cv.width * 0.22;
-        a = k;
-      } else {
-        a = k;
+    const baseFs = (st.size / 100) * Math.min(W, H);
+
+    interface ActiveLineLayout {
+      item: LyricItem;
+      fs: number;
+      lh: number;
+      th: number;
+      textColor: string;
+      hiColor: string;
+      prog: number | null;
+      alpha: number;
+      animScale: number;
+      animDx: number;
+      animYcOffset: number;
+      textToDraw: string;
+    }
+
+    const layouts: ActiveLineLayout[] = activeItems.map(item => {
+      const lane = typeof item.lane === 'number' ? item.lane : 0;
+      let fs = (item.size && item.size > 0) ? (item.size / 100 * Math.min(W, H)) : baseFs;
+      if (!item.size && lane >= 1) {
+        const scale = (st.lane2Scale != null ? st.lane2Scale : 80) / 100;
+        fs = baseFs * clamp(scale, 0.4, 1.5);
+      }
+
+      let textColor = item.color || st.color;
+      if (!item.color && lane >= 1) {
+        textColor = st.lane2Color || '#cbd5e1';
+      }
+      const hiColor = item.hi || st.hi;
+
+      const lineEnd = (item.endT && item.endT > item.t) ? item.endT : item.t + 3.0;
+      const fillDur = Math.max(0.2, lineEnd - item.t);
+      const prog = st.karaoke ? clamp((t - item.t) / fillDur, 0, 1) : null;
+
+      // Hiệu ứng chữ xuất hiện (~0.3 giây)
+      const age = Math.max(0, t - item.t);
+      const k = clamp(age / 0.3, 0, 1);
+      let alpha = k;
+      let animScale = 1;
+      let animDx = 0;
+      let animYcOffset = 0;
+      let textToDraw = item.text;
+
+      const animType = st.anim || 'fade';
+      if (k < 1) {
+        if (animType === 'rise') {
+          animYcOffset = (1 - k) * fs * 0.45;
+          alpha = k;
+        } else if (animType === 'pop') {
+          animScale = k < 0.65 ? 0.65 + (k / 0.65) * 0.5 : 1.15 - ((k - 0.65) / 0.35) * 0.15;
+          alpha = clamp(k * 2, 0, 1);
+        } else if (animType === 'type') {
+          const count = Math.max(1, Math.floor(item.text.length * k));
+          textToDraw = item.text.slice(0, count);
+          alpha = 1;
+        } else if (animType === 'slide') {
+          animDx = -(1 - k) * W * 0.22;
+          alpha = k;
+        } else {
+          alpha = k;
+        }
+      }
+
+      ctx.save();
+      ctx.font = st.weight + ' ' + fs + 'px "' + st.font + '", sans-serif';
+      const maxW = W * (W > H ? 0.8 : 0.88);
+      const wrapped = wrap(textToDraw, maxW);
+      ctx.restore();
+
+      const lh = fs * 1.28;
+      const th = Math.max(1, wrapped.length) * lh;
+
+      return {
+        item,
+        fs,
+        lh,
+        th,
+        textColor,
+        hiColor,
+        prog,
+        alpha,
+        animScale,
+        animDx,
+        animYcOffset,
+        textToDraw
+      };
+    });
+
+    // Khoảng cách giữa các câu xếp chồng = 40% chiều cao dòng
+    let totalClusterHeight = 0;
+    const gaps: number[] = [];
+    for (let i = 0; i < layouts.length; i++) {
+      totalClusterHeight += layouts[i].th;
+      if (i < layouts.length - 1) {
+        const gap = layouts[i].lh * 0.4;
+        gaps.push(gap);
+        totalClusterHeight += gap;
       }
     }
 
-    if (animScale !== 1 || animDx !== 0) {
-      ctx.save();
-      ctx.translate(cv.width / 2 + animDx, animYc);
-      ctx.scale(animScale, animScale);
-      ctx.translate(-cv.width / 2, -animYc);
-    }
-    const th = drawText(textToDraw, animYc, fs, prog, a, { color: cur.color, hi: cur.hi });
-    if (animScale !== 1 || animDx !== 0) {
-      ctx.restore();
+    // Cả cụm căn theo vị trí đã cài ở tab "Chữ" (st.y)
+    const baseYc = H * st.y / 100;
+    let curY = baseYc - totalClusterHeight / 2;
+
+    for (let i = 0; i < layouts.length; i++) {
+      const lay = layouts[i];
+      const itemYc = curY + lay.th / 2 + lay.animYcOffset;
+
+      if (lay.animScale !== 1 || lay.animDx !== 0) {
+        ctx.save();
+        ctx.translate(W / 2 + lay.animDx, itemYc);
+        ctx.scale(lay.animScale, lay.animScale);
+        ctx.translate(-W / 2, -itemYc);
+      }
+
+      drawText(lay.textToDraw, itemYc, lay.fs, lay.prog, lay.alpha, { color: lay.textColor, hi: lay.hiColor });
+
+      if (lay.animScale !== 1 || lay.animDx !== 0) {
+        ctx.restore();
+      }
+
+      curY += lay.th + (gaps[i] || 0);
     }
   }
   function drawTitle(t: number) {
@@ -2163,11 +2342,69 @@ export function initStudio() {
 
   /* ---------- LYRIC: BỘ 3 BƯỚC (NHẬP LỜI - CĂN GIỜ - CHỈNH SỬA) ---------- */
   const TAGRE = /^\s*\[(\d+):(\d{1,2}(?:[.,]\d+)?)\](?:<(\d+):(\d{1,2}(?:[.,]\d+)?)>)?/;
-  const STYLE_RE = /\s*\{(?:c=([^}\s]+))?(?:\s*h=([^}\s]+))?(?:\s*s=([\d.]+))?\}\s*$/;
+  const STYLE_RE = /\s*\{(?:c=([^}\s]+))?(?:\s*h=([^}\s]+))?(?:\s*s=([\d.]+))?(?:\s*lane=(\d+))?\}\s*$/;
 
   let currentLyrStep: 1 | 2 | 3 = 1;
   let tapIndex = 0;
   let lastActiveCardId: number | null = null;
+
+  function getLyricLaneCount(): number {
+    const maxLane = S.lyr.reduce((max, l) => Math.max(max, typeof l.lane === 'number' ? l.lane : 0), 0);
+    return clamp(maxLane + 1, 1, 4);
+  }
+
+  function canPlaceInLane(t: number, endT: number, targetLane: number, excludeId?: number): boolean {
+    for (const item of S.lyr) {
+      if (item.id === excludeId) continue;
+      const l = typeof item.lane === 'number' ? item.lane : 0;
+      if (l !== targetLane) continue;
+      const itemEnd = (item.endT && item.endT > item.t) ? item.endT : item.t + 3.0;
+      if (t < itemEnd - 0.04 && endT > item.t + 0.04) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function findAvailableLane(t: number, endT: number, preferredLane = 0, excludeId?: number): number {
+    preferredLane = clamp(preferredLane, 0, 3);
+    if (canPlaceInLane(t, endT, preferredLane, excludeId)) {
+      return preferredLane;
+    }
+    // Quét các hàng khác ưu tiên gần preferredLane nhất
+    const order = [0, 1, 2, 3].sort((a, b) => Math.abs(a - preferredLane) - Math.abs(b - preferredLane));
+    for (const lane of order) {
+      if (canPlaceInLane(t, endT, lane, excludeId)) {
+        return lane;
+      }
+    }
+    return preferredLane;
+  }
+
+  function normalizeLyricLanes() {
+    S.lyr.sort((a, b) => a.t - b.t);
+    const placed: { lane: number; t: number; endT: number }[] = [];
+    S.lyr.forEach(item => {
+      let desiredLane = typeof item.lane === 'number' ? clamp(item.lane, 0, 3) : 0;
+      const endT = (item.endT && item.endT > item.t) ? item.endT : item.t + 3.0;
+      item.endT = endT;
+
+      let foundLane = -1;
+      const order = [desiredLane, 0, 1, 2, 3].filter((v, i, a) => a.indexOf(v) === i);
+      for (const lane of order) {
+        const hasOverlap = placed.some(p => p.lane === lane && item.t < p.endT - 0.04 && endT > p.t + 0.04);
+        if (!hasOverlap) {
+          foundLane = lane;
+          break;
+        }
+      }
+      if (foundLane === -1) {
+        foundLane = desiredLane;
+      }
+      item.lane = foundLane;
+      placed.push({ lane: foundLane, t: item.t, endT });
+    });
+  }
 
   function parseLyr(txt: string): LyricItem[] {
     const out: LyricItem[] = [];
@@ -2182,12 +2419,14 @@ export function initStudio() {
         let color: string | undefined;
         let hi: string | undefined;
         let size: number | undefined;
+        let lane: number | undefined;
 
         const sm = STYLE_RE.exec(text);
         if (sm) {
           color = sm[1];
           hi = sm[2];
           size = sm[3] ? parseFloat(sm[3]) : undefined;
+          lane = sm[4] ? parseInt(sm[4], 10) : undefined;
           text = text.slice(0, sm.index).trim();
         }
 
@@ -2196,6 +2435,7 @@ export function initStudio() {
           t: startT,
           endT,
           text,
+          lane: typeof lane === 'number' ? clamp(lane, 0, 3) : 0,
           color,
           hi,
           size
@@ -2211,6 +2451,25 @@ export function initStudio() {
         out[i].endT = nx ? nx.t : (out[i].t + 3.5);
       }
     }
+
+    // Tự động phân hàng để không có câu nào cùng hàng bị chồng giờ
+    const placed: { lane: number; t: number; endT: number }[] = [];
+    out.forEach(item => {
+      let desiredLane = typeof item.lane === 'number' ? clamp(item.lane, 0, 3) : 0;
+      let foundLane = -1;
+      const order = [desiredLane, 0, 1, 2, 3].filter((v, i, a) => a.indexOf(v) === i);
+      for (const lane of order) {
+        const hasOverlap = placed.some(p => p.lane === lane && item.t < p.endT - 0.04 && item.endT > p.t + 0.04);
+        if (!hasOverlap) {
+          foundLane = lane;
+          break;
+        }
+      }
+      if (foundLane === -1) foundLane = desiredLane;
+      item.lane = foundLane;
+      placed.push({ lane: foundLane, t: item.t, endT: item.endT });
+    });
+
     return out;
   }
 
@@ -2240,11 +2499,28 @@ export function initStudio() {
           id: ++lyrUid,
           t: parseFloat(startT.toFixed(2)),
           endT: parseFloat(endT.toFixed(2)),
-          text
+          text,
+          lane: 0
         });
       }
     }
     out.sort((a, b) => a.t - b.t);
+
+    const placed: { lane: number; t: number; endT: number }[] = [];
+    out.forEach(item => {
+      let foundLane = -1;
+      for (const lane of [0, 1, 2, 3]) {
+        const hasOverlap = placed.some(p => p.lane === lane && item.t < p.endT - 0.04 && item.endT > p.t + 0.04);
+        if (!hasOverlap) {
+          foundLane = lane;
+          break;
+        }
+      }
+      if (foundLane === -1) foundLane = 0;
+      item.lane = foundLane;
+      placed.push({ lane: foundLane, t: item.t, endT: item.endT });
+    });
+
     return out;
   }
 
@@ -2259,6 +2535,7 @@ export function initStudio() {
       if (item.color) styleParts.push('c=' + item.color);
       if (item.hi) styleParts.push('h=' + item.hi);
       if (item.size && item.size > 0) styleParts.push('s=' + item.size);
+      if (typeof item.lane === 'number' && item.lane > 0) styleParts.push('lane=' + item.lane);
       if (styleParts.length) {
         line += ' {' + styleParts.join(' ') + '}';
       }
@@ -2277,6 +2554,7 @@ export function initStudio() {
     selAudioId: number | null;
     sel: number | null;
     selLyrId: number | null;
+    activeTrack: 'clip' | 'audio' | 'lyric';
     lyr: LyricItem[];
     lrcText: string;
     fadeIn: number;
@@ -2305,6 +2583,7 @@ export function initStudio() {
       selAudioId: S.selAudioId,
       sel: S.sel,
       selLyrId: S.selLyrId,
+      activeTrack: S.activeTrack || 'clip',
       lyr: S.lyr.map(item => ({ ...item })),
       lrcText: formatLrcFromLyr(S.lyr),
       fadeIn: A.fadeIn,
@@ -2324,6 +2603,7 @@ export function initStudio() {
       selAudioId: S.selAudioId,
       sel: S.sel,
       selLyrId: S.selLyrId,
+      activeTrack: S.activeTrack || 'clip',
       lyr: S.lyr.map(item => ({ ...item })),
       lrcText: formatLrcFromLyr(S.lyr),
       fadeIn: A.fadeIn,
@@ -2336,6 +2616,7 @@ export function initStudio() {
     S.selAudioId = prev.selAudioId;
     S.sel = prev.sel;
     S.selLyrId = prev.selLyrId;
+    S.activeTrack = prev.activeTrack || 'clip';
     S.lyr = prev.lyr.map(item => ({ ...item }));
     A.fadeIn = prev.fadeIn;
     A.fadeOut = prev.fadeOut;
@@ -2344,7 +2625,6 @@ export function initStudio() {
     if (tlFadeIn) tlFadeIn.value = String(A.fadeIn);
     const tlFadeOut = $('#tlFadeOut') as HTMLSelectElement | null;
     if (tlFadeOut) tlFadeOut.value = String(A.fadeOut);
-    autoFitImagesToMusic();
     refreshAll();
     renderLyricUI();
     updateInspector();
@@ -2360,6 +2640,7 @@ export function initStudio() {
       selAudioId: S.selAudioId,
       sel: S.sel,
       selLyrId: S.selLyrId,
+      activeTrack: S.activeTrack || 'clip',
       lyr: S.lyr.map(item => ({ ...item })),
       lrcText: formatLrcFromLyr(S.lyr),
       fadeIn: A.fadeIn,
@@ -2372,6 +2653,7 @@ export function initStudio() {
     S.selAudioId = next.selAudioId;
     S.sel = next.sel;
     S.selLyrId = next.selLyrId;
+    S.activeTrack = next.activeTrack || 'clip';
     S.lyr = next.lyr.map(item => ({ ...item }));
     A.fadeIn = next.fadeIn;
     A.fadeOut = next.fadeOut;
@@ -2380,7 +2662,6 @@ export function initStudio() {
     if (tlFadeIn) tlFadeIn.value = String(A.fadeIn);
     const tlFadeOut = $('#tlFadeOut') as HTMLSelectElement | null;
     if (tlFadeOut) tlFadeOut.value = String(A.fadeOut);
-    autoFitImagesToMusic();
     refreshAll();
     renderLyricUI();
     updateInspector();
@@ -2412,6 +2693,8 @@ export function initStudio() {
     S.selLyrId = id;
     if (id != null) {
       S.sel = null; // Bỏ chọn clip để bảng thuộc tính hiện câu lyric
+      S.selAudioId = null;
+      S.activeTrack = 'lyric';
       document.querySelectorAll('.lyr-card.selected').forEach(c => c.classList.remove('selected'));
       const cardEl = document.getElementById('card-lyr-' + id);
       if (cardEl) {
@@ -2775,12 +3058,13 @@ export function initStudio() {
     pushLyricHistory();
     const newId = ++lyrUid;
     const t = Math.max(0, parseFloat(S.t.toFixed(2)));
-    const endT = parseFloat((t + 3.0).toFixed(2));
-    S.lyr.push({ id: newId, t, endT, text: 'Câu mới' });
+    const endT = parseFloat((t + 2.0).toFixed(2));
+    const lane = findAvailableLane(t, endT, 0);
+    S.lyr.push({ id: newId, t, endT, text: 'Câu mới', lane });
     S.lyr.sort((a, b) => a.t - b.t);
     selectLyrBlock(newId);
     syncLyrToEditor(false);
-    toast('Đã thêm câu mới tại ' + fmt(t));
+    toast(`Đã thêm câu mới (2.0s) tại ${fmt(t)} (Hàng ${lane + 1})`);
   }
 
   function splitLyricAtPlayhead() {
@@ -4382,27 +4666,52 @@ export function initStudio() {
       }
     }
 
-    // Render Lyric Lane (#llane)
-    let l = '';
-    S.lyr.forEach((ly, i) => {
-      const isSel = ly.id === S.selLyrId;
-      const endT = ly.endT || ((S.lyr[i + 1]?.t) || (ly.t + 3));
-      const dur = Math.max(0.2, endT - ly.t);
-      const w = Math.max(16, dur * pps - 2);
+    // Multi-lane Lyric Lane (#llane) & Track Header
+    const numLanes = getLyricLaneCount();
+    const llaneHeight = numLanes * 30;
 
-      const prev = S.lyr[i - 1];
-      const next = S.lyr[i + 1];
-      const isOverlap = (prev && ly.t < (prev.endT || (prev.t + 0.1)) - 0.05) || (next && endT > next.t + 0.05);
+    const tlColLyr = $('#tlColLyr');
+    if (tlColLyr) {
+      tlColLyr.style.height = (24 + llaneHeight) + 'px';
+    }
+    const colLyrSubrows = $('#tlColLyrSubrows');
+    if (colLyrSubrows) {
+      let subHtml = '';
+      for (let row = 0; row < numLanes; row++) {
+        subHtml += `<div class="tl-col-lyr-lane-row" style="top:${row * 30}px;height:30px;">Hàng ${row + 1}</div>`;
+      }
+      colLyrSubrows.innerHTML = subHtml;
+    }
 
-      l += '<div class="lyr-block' + (isSel ? ' sel' : '') + (isOverlap ? ' overlap' : '') + '" data-lid="' + ly.id + '" style="left:' + (ly.t * pps) + 'px;width:' + w + 'px" title="' + esc(ly.text) + ' [' + fmt(ly.t) + ' ➔ ' + fmt(endT) + ']' + (isOverlap ? ' (CẢNH BÁO: Chồng giờ với câu khác!)' : '') + '">'
-        + (isSel ? '<span class="lyr-handle left" data-lid="' + ly.id + '" title="Kéo mép trái để đổi giờ bắt đầu"></span>' : '')
-        + '<span class="lyr-idx">#' + (i + 1) + '</span>'
-        + '<span class="lyr-txt">' + esc(ly.text || '(trống)') + '</span>'
-        + (isSel ? '<span class="lyr-handle right" data-lid="' + ly.id + '" title="Kéo mép phải để đổi giờ kết thúc"></span>' : '')
-        + '</div>';
-    });
     const llaneEl = $('#llane');
-    if (llaneEl) llaneEl.innerHTML = l;
+    if (llaneEl) {
+      llaneEl.style.height = llaneHeight + 'px';
+      let l = '';
+      for (let row = 0; row < numLanes; row++) {
+        l += `<div class="llane-subrow" style="top:${row * 30}px;height:30px;"></div>`;
+      }
+
+      S.lyr.forEach((ly, i) => {
+        const isSel = ly.id === S.selLyrId;
+        const endT = (ly.endT && ly.endT > ly.t) ? ly.endT : (ly.t + 3.0);
+        const dur = Math.max(0.2, endT - ly.t);
+        const w = Math.max(24, dur * pps - 2);
+        const lane = typeof ly.lane === 'number' ? clamp(ly.lane, 0, 3) : 0;
+        const topPx = lane * 30 + 2;
+
+        l += '<div class="lyr-block' + (isSel ? ' sel' : '') + '" data-lid="' + ly.id + '" style="left:' + (ly.t * pps) + 'px;top:' + topPx + 'px;width:' + w + 'px" title="' + esc(ly.text) + ' [' + fmt(ly.t) + ' ➔ ' + fmt(endT) + ' - Hàng ' + (lane + 1) + ']">'
+          + '<span class="lyr-handle left" data-lid="' + ly.id + '" data-handle="left" title="Kéo mép trái để đổi giờ bắt đầu"></span>'
+          + '<span class="lyr-idx">#' + (i + 1) + '</span>'
+          + '<span class="lyr-txt">' + esc(ly.text || '(trống)') + '</span>'
+          + '<span class="lyr-handle right" data-lid="' + ly.id + '" data-handle="right" title="Kéo mép phải để đổi giờ kết thúc"></span>'
+          + '</div>';
+      });
+      llaneEl.innerHTML = l;
+    }
+
+    if (tlEl) {
+      tlEl.style.height = (144 + llaneHeight + 8) + 'px';
+    }
 
     updateInspector();
     updateUI();
@@ -4526,6 +4835,8 @@ export function initStudio() {
       if (startEl && document.activeElement !== startEl) startEl.value = ly.t.toFixed(2);
       const endEl = $('#inspLyrEnd') as HTMLInputElement | null;
       if (endEl && document.activeElement !== endEl) endEl.value = endT.toFixed(2);
+      const laneEl = $('#inspLyrLane') as HTMLSelectElement | null;
+      if (laneEl && document.activeElement !== laneEl) laneEl.value = String(typeof ly.lane === 'number' ? ly.lane : 0);
 
       const colorDef = $('#inspLyrColorDef') as HTMLInputElement | null;
       const colorEl = $('#inspLyrColor') as HTMLInputElement | null;
@@ -4573,23 +4884,23 @@ export function initStudio() {
   function renderMediaDrawerCards() {
     const container = $('#mediaDrawerCards');
     if (!container) return;
-    if (!S.clips.length) {
+    if (!S.mediaList.length) {
       container.innerHTML = '<div class="p-4 text-center text-xs text-slate-400">Chưa có tệp media nào. Bấm nút "Import media" phía trên để thêm ảnh hoặc video.</div>';
       return;
     }
     let html = '';
-    S.clips.forEach((c) => {
-      const isSel = c.id === S.sel;
-      html += '<div class="media-drawer-card ' + (isSel ? 'selected' : '') + '" data-cid="' + c.id + '" title="' + esc(c.name) + '">'
+    S.mediaList.forEach((m) => {
+      const isAssociated = S.clips.some(c => c.mediaId === m.id && c.id === S.sel);
+      html += '<div class="media-drawer-card ' + (isAssociated ? 'selected' : '') + '" data-mid="' + m.id + '" title="' + esc(m.name) + '">'
         + '<div class="media-drawer-thumb-wrap">'
-        + '<img src="' + (c.thumb || c.url) + '" alt="' + esc(c.name) + '" class="media-drawer-thumb" />'
-        + '<span class="media-drawer-type-badge">' + (c.type === 'video' ? '🎬' : '🖼️') + '</span>'
+        + '<img src="' + (m.thumb || m.url) + '" alt="' + esc(m.name) + '" class="media-drawer-thumb" />'
+        + '<span class="media-drawer-type-badge">' + (m.type === 'video' ? '🎬' : '🖼️') + '</span>'
         + '</div>'
         + '<div class="media-drawer-info">'
-        + '<span class="media-drawer-title" title="' + esc(c.name) + '">' + esc(c.name) + '</span>'
-        + '<span class="media-drawer-meta">' + c.dur.toFixed(1) + 's</span>'
+        + '<span class="media-drawer-title" title="' + esc(m.name) + '">' + esc(m.name) + '</span>'
+        + '<span class="media-drawer-meta">' + (m.type === 'video' ? m.full.toFixed(1) + 's' : 'Ảnh') + '</span>'
         + '</div>'
-        + '<button type="button" class="media-drawer-add-btn" data-add-cid="' + c.id + '" title="Thêm vào timeline">+</button>'
+        + '<button type="button" class="media-drawer-add-btn" data-add-mid="' + m.id + '" title="Thêm vào timeline">+</button>'
         + '</div>';
     });
     container.innerHTML = html;
@@ -4597,25 +4908,58 @@ export function initStudio() {
     container.querySelectorAll('.media-drawer-card').forEach((cardEl: any) => {
       cardEl.addEventListener('click', (e: MouseEvent) => {
         const addBtn = (e.target as HTMLElement).closest('.media-drawer-add-btn');
-        const cid = +(cardEl.dataset.cid || 0);
+        const mid = +(cardEl.dataset.mid || 0);
+        const m = S.mediaList.find(x => x.id === mid);
+        if (!m) return;
         if (addBtn) {
           e.stopPropagation();
-          const targetClip = S.clips.find(x => x.id === cid);
-          if (targetClip) {
-            pushTimelineHistory();
-            const copy = cloneClip(targetClip);
-            copy.name = targetClip.name + ' (thêm)';
-            S.clips.push(copy);
-            S.sel = copy.id;
-            refreshAll();
-            toast('Đã thêm "' + targetClip.name + '" vào timeline');
+          pushTimelineHistory();
+          let c: Clip;
+          if (m.type === 'video') {
+            c = newClip({
+              mediaId: m.id,
+              type: 'video',
+              name: m.name,
+              el: makeVideo(m.url),
+              url: m.url,
+              dur: m.full,
+              srcIn: 0,
+              srcOut: m.full,
+              full: m.full,
+              fit: 'cover',
+              fx: 'none',
+              tr: S.def.tr,
+              thumb: m.thumb
+            });
+          } else {
+            c = newClip({
+              mediaId: m.id,
+              type: 'image',
+              name: m.name,
+              el: m.el,
+              url: m.url,
+              dur: S.def.dur,
+              thumb: m.thumb
+            });
           }
+          S.clips.push(c);
+          S.sel = c.id;
+          S.selAudioId = null;
+          S.selLyrId = null;
+          S.activeTrack = 'clip';
+          refreshAll();
+          toast('Đã thêm "' + m.name + '" vào timeline');
           return;
         }
-        S.sel = cid;
-        S.selAudioId = null;
-        S.selLyrId = null;
-        refreshAll();
+        // Bấm vào thân thẻ: chọn clip tương ứng trên timeline nếu có
+        const associated = S.clips.find(c => c.mediaId === m.id);
+        if (associated) {
+          S.sel = associated.id;
+          S.selAudioId = null;
+          S.selLyrId = null;
+          S.activeTrack = 'clip';
+          refreshAll();
+        }
       });
     });
   }
@@ -4655,11 +4999,145 @@ export function initStudio() {
     if (c.type === 'video') n.el = makeVideo(c.url);
     return n;
   }
-  function splitClipAtPlayhead() {
+
+  function splitAtPlayhead() {
+    // Xác định track mục tiêu cần tách
+    let track: 'audio' | 'lyric' | 'clip' = S.activeTrack || 'clip';
+    if (S.selAudioId != null) track = 'audio';
+    else if (S.selLyrId != null) track = 'lyric';
+    else if (S.sel != null) track = 'clip';
+
+    // 1. TÁCH KHỐI NHẠC (AUDIO BLOCK)
+    if (track === 'audio') {
+      if (!A.loaded || !S.audioBlocks.length) {
+        return toast('Chưa có đoạn nhạc để tách.');
+      }
+      let bIdx = -1;
+      if (S.selAudioId != null) {
+        const idx = S.audioBlocks.findIndex(b => b.id === S.selAudioId);
+        if (idx >= 0) {
+          const b = S.audioBlocks[idx];
+          if (S.t >= b.start && S.t <= b.start + b.dur) {
+            bIdx = idx;
+          }
+        }
+      }
+      if (bIdx < 0) {
+        bIdx = S.audioBlocks.findIndex(b => S.t >= b.start && S.t <= b.start + b.dur);
+      }
+
+      if (bIdx < 0) {
+        return toast('Đặt playhead lên clip cần tách');
+      }
+
+      const b = S.audioBlocks[bIdx];
+      const cutPos = S.t - b.start;
+      if (cutPos < 0.1 || (b.dur - cutPos) < 0.1) {
+        return toast('Đầu phát phải cách mép đoạn nhạc ít nhất 0.1 giây để tách.');
+      }
+
+      pushTimelineHistory();
+      const b1: AudioBlock = {
+        id: b.id,
+        start: b.start,
+        srcIn: parseFloat(b.srcIn.toFixed(3)),
+        srcOut: parseFloat((b.srcIn + cutPos).toFixed(3)),
+        dur: parseFloat(cutPos.toFixed(3))
+      };
+      const b2: AudioBlock = {
+        id: ++audioUid,
+        start: parseFloat(S.t.toFixed(3)),
+        srcIn: parseFloat((b.srcIn + cutPos).toFixed(3)),
+        srcOut: parseFloat(b.srcOut.toFixed(3)),
+        dur: parseFloat((b.dur - cutPos).toFixed(3))
+      };
+
+      S.audioBlocks.splice(bIdx, 1, b1, b2);
+      S.selAudioId = b2.id;
+      S.sel = null;
+      S.selLyrId = null;
+      S.activeTrack = 'audio';
+
+      refreshAll();
+      toast(`Đã tách đoạn nhạc thành 2 khối tại ${fmt(S.t)}.`);
+      return;
+    }
+
+    // 2. TÁCH KHỐI LYRIC (DÒNG LỜI BÀI HÁT)
+    if (track === 'lyric') {
+      if (!S.lyr.length) {
+        return toast('Chưa có câu lyric để tách.');
+      }
+      let lIdx = -1;
+      if (S.selLyrId != null) {
+        const idx = S.lyr.findIndex(l => l.id === S.selLyrId);
+        if (idx >= 0) {
+          const ly = S.lyr[idx];
+          const endT = ly.endT || (ly.t + 3.0);
+          if (S.t >= ly.t && S.t <= endT) {
+            lIdx = idx;
+          }
+        }
+      }
+      if (lIdx < 0) {
+        lIdx = S.lyr.findIndex(ly => {
+          const endT = ly.endT || (ly.t + 3.0);
+          return S.t >= ly.t && S.t <= endT;
+        });
+      }
+
+      if (lIdx < 0) {
+        return toast('Đặt playhead lên clip cần tách');
+      }
+
+      const cur = S.lyr[lIdx];
+      const curEnd = cur.endT || (cur.t + 3.0);
+      if (S.t <= cur.t + 0.1 || S.t >= curEnd - 0.1) {
+        return toast('Đầu phát phải cách mép câu lyric ít nhất 0.1 giây để tách.');
+      }
+
+      pushTimelineHistory();
+      const words = cur.text.split(' ');
+      const frac = clamp((S.t - cur.t) / (curEnd - cur.t), 0.1, 0.9);
+      const mid = Math.max(1, Math.round(words.length * frac));
+      const txt1 = words.slice(0, mid).join(' ') || cur.text;
+      const txt2 = words.slice(mid).join(' ') || '...';
+      const origEnd = curEnd;
+
+      cur.endT = parseFloat(S.t.toFixed(2));
+      cur.text = txt1;
+
+      const nextId = ++lyrUid;
+      const nextItem: LyricItem = {
+        id: nextId,
+        t: parseFloat(S.t.toFixed(2)),
+        endT: origEnd,
+        text: txt2,
+        color: cur.color,
+        hi: cur.hi,
+        size: cur.size
+      };
+      S.lyr.splice(lIdx + 1, 0, nextItem);
+      S.lyr.sort((a, b) => a.t - b.t);
+
+      S.selLyrId = nextId;
+      S.sel = null;
+      S.selAudioId = null;
+      S.activeTrack = 'lyric';
+
+      syncLyrToEditor(false);
+      toast(`Đã tách câu lyric thành 2 câu tại ${fmt(S.t)}.`);
+      return;
+    }
+
+    // 3. TÁCH CLIP HÌNH ẢNH / VIDEO
+    if (!S.clips.length) {
+      return toast('Chưa có clip để tách.');
+    }
+
     let targetIdx = -1;
     let clipStartSec = 0;
 
-    // 1. Nếu đang chọn clip, kiểm tra xem playhead có nằm trong clip đó không
     if (S.sel != null) {
       let accum = 0;
       for (let i = 0; i < S.clips.length; i++) {
@@ -4675,7 +5153,6 @@ export function initStudio() {
       }
     }
 
-    // 2. Nếu clip đang chọn không chứa playhead hoặc chưa chọn clip nào, tìm clip ngay dưới playhead
     if (targetIdx < 0) {
       let accum = 0;
       for (let i = 0; i < S.clips.length; i++) {
@@ -4689,90 +5166,84 @@ export function initStudio() {
       }
     }
 
-    // 3. Nếu tìm thấy clip dưới playhead
-    if (targetIdx >= 0) {
-      const c = S.clips[targetIdx];
-      const local = S.t - clipStartSec;
-
-      // Không cho cắt nếu playhead cách mép clip dưới 0.3s
-      if (local < 0.3 || (c.dur - local) < 0.3) {
-        return toast('Đầu phát phải cách mép clip ít nhất 0.3 giây để cắt.');
-      }
-
-      pushTimelineHistory();
-      const c2 = cloneClip(c);
-      c2.tr = 'none';
-      c2.fit = c.fit;
-      c2.fx = c.fx;
-      c2.color = c.color;
-      c2.sample = c.sample;
-      c2.name = c.name + ' (phần 2)';
-
-      if (c.type === 'image') {
-        const oldDur = c.dur;
-        c.dur = parseFloat(local.toFixed(2));
-        c2.dur = parseFloat((oldDur - local).toFixed(2));
-      } else {
-        const oldSrcOut = c.srcOut;
-        c.srcOut = parseFloat((c.srcIn + local).toFixed(2));
-        c.dur = parseFloat((c.srcOut - c.srcIn).toFixed(2));
-        c2.srcIn = c.srcOut;
-        c2.srcOut = oldSrcOut;
-        c2.dur = parseFloat((oldSrcOut - c2.srcIn).toFixed(2));
-      }
-
-      c.trDur = Math.max(0.1, Math.min(c.trDur || 1.0, c.dur * 0.5));
-      c2.tr = 'none';
-      c2.trDur = Math.max(0.1, Math.min(1.0, c2.dur * 0.5));
-
-      S.clips.splice(targetIdx + 1, 0, c2);
-      S.sel = c2.id;
-      S.selAudioId = null;
-      S.selLyrId = null;
-
-      if (S.syncWithMusic) applyMusicSync();
-      refreshAll();
-      toast(`Đã cắt clip "${c.name}" thành 2 clip tại ${fmt(S.t)}.`);
-      return;
+    if (targetIdx < 0) {
+      return toast('Đặt playhead lên clip cần tách');
     }
 
-    // 4. Nếu playhead nằm trong một đoạn nhạc
-    const bIdx = S.audioBlocks.findIndex(b => S.t > b.start + 0.1 && S.t < b.start + b.dur - 0.1);
-    if (bIdx >= 0) {
-      pushTimelineHistory();
-      const b = S.audioBlocks[bIdx];
-      const cutPos = S.t - b.start;
-      const b1: AudioBlock = {
-        id: b.id,
-        start: b.start,
-        srcIn: b.srcIn,
-        srcOut: b.srcIn + cutPos,
-        dur: cutPos
-      };
-      const b2: AudioBlock = {
-        id: ++audioUid,
-        start: S.t,
-        srcIn: b.srcIn + cutPos,
-        srcOut: b.srcOut,
-        dur: b.dur - cutPos
-      };
-      S.audioBlocks.splice(bIdx, 1, b1, b2);
-      S.selAudioId = b2.id;
-      S.sel = null;
-      S.selLyrId = null;
-      autoFitImagesToMusic();
-      refreshAll();
-      toast('Đã tách đoạn nhạc thành 2 phần tại ' + fmt(S.t));
-      return;
+    const c = S.clips[targetIdx];
+    const local = S.t - clipStartSec;
+
+    if (local < 0.2 || (c.dur - local) < 0.2) {
+      return toast('Đầu phát phải cách mép clip ít nhất 0.2 giây để tách.');
     }
 
-    toast('Đưa đầu phát vào giữa clip hoặc đoạn nhạc để cắt (Phím S).');
+    pushTimelineHistory();
+    const c2 = cloneClip(c);
+    c2.mediaId = c.mediaId; // Giữ nguyên nguồn media gốc, không tạo thêm tệp trong thư viện!
+    c2.name = c.name; // Giữ nguyên tên gốc, không thêm (phần 2)
+    c2.sample = c.sample;
+    c2.fit = c.fit;
+    c2.fx = c.fx;
+    c2.color = c.color;
+    c2.thumb = c.thumb;
+
+    if (c.type === 'image') {
+      const oldDur = c.dur;
+      c.dur = parseFloat(local.toFixed(2));
+      c2.dur = parseFloat((oldDur - local).toFixed(2));
+    } else {
+      const oldSrcOut = c.srcOut;
+      c.srcOut = parseFloat((c.srcIn + local).toFixed(2));
+      c.dur = parseFloat((c.srcOut - c.srcIn).toFixed(2));
+      c2.srcIn = c.srcOut;
+      c2.srcOut = oldSrcOut;
+      c2.dur = parseFloat((oldSrcOut - c2.srcIn).toFixed(2));
+    }
+
+    // Clip trái giữ chuyển cảnh vào; clip phải chuyển cảnh mặc định none
+    c.trDur = Math.max(0.1, Math.min(c.trDur || 1.0, c.dur * 0.5));
+    c2.tr = 'none';
+    c2.trDur = Math.max(0.1, Math.min(1.0, c2.dur * 0.5));
+
+    S.clips.splice(targetIdx + 1, 0, c2);
+    S.sel = c2.id;
+    S.selAudioId = null;
+    S.selLyrId = null;
+    S.activeTrack = 'clip';
+
+    refreshAll();
+    toast(`Đã tách clip "${c.name}" thành 2 clip tại ${fmt(S.t)}.`);
   }
 
-  const splitAtPlayhead = splitClipAtPlayhead;
-  const splitAtHead = splitClipAtPlayhead;
+  const splitClipAtPlayhead = splitAtPlayhead;
+  const splitAtHead = splitAtPlayhead;
 
   function deleteSelected() {
+    let track: 'audio' | 'lyric' | 'clip' = S.activeTrack || 'clip';
+    if (S.selAudioId != null) track = 'audio';
+    else if (S.selLyrId != null) track = 'lyric';
+    else if (S.sel != null) track = 'clip';
+
+    // Xóa đoạn nhạc đang chọn
+    if (track === 'audio' && S.selAudioId != null) {
+      const idx = S.audioBlocks.findIndex(b => b.id === S.selAudioId);
+      if (idx >= 0) {
+        pushTimelineHistory();
+        S.audioBlocks.splice(idx, 1);
+        S.selAudioId = S.audioBlocks[Math.min(idx, S.audioBlocks.length - 1)]?.id ?? null;
+        refreshAll();
+        toast('Đã xóa đoạn nhạc.');
+        return;
+      }
+    }
+
+    // Xóa câu lyric đang chọn
+    if (track === 'lyric' && S.selLyrId != null) {
+      deleteLyricLine();
+      return;
+    }
+
+    // Xóa clip đang chọn
     if (S.sel != null) {
       const i = S.clips.findIndex(c => c.id === S.sel);
       if (i >= 0) {
@@ -4790,26 +5261,10 @@ export function initStudio() {
           }
         }
         S.sel = S.clips[Math.min(i, S.clips.length - 1)]?.id ?? null;
-        if (S.syncWithMusic) applyMusicSync();
         refreshAll();
         toast('Đã xóa clip: ' + removed.name);
         return;
       }
-    }
-    if (S.selAudioId != null) {
-      const idx = S.audioBlocks.findIndex(b => b.id === S.selAudioId);
-      if (idx >= 0) {
-        pushTimelineHistory();
-        S.audioBlocks.splice(idx, 1);
-        S.selAudioId = S.audioBlocks[Math.min(idx, S.audioBlocks.length - 1)]?.id ?? null;
-        autoFitImagesToMusic();
-        refreshAll();
-        toast('Đã xóa đoạn nhạc');
-        return;
-      }
-    }
-    if (S.selLyrId != null) {
-      deleteLyricLine();
     }
   }
 
@@ -5336,19 +5791,7 @@ export function initStudio() {
 
     // Các nút trong thuộc tính đoạn nhạc (Contextual Audio)
     safeClick('#btnCtxCloseGaps', closeAudioGaps);
-    safeClick('#btnCtxDelAudio', () => {
-      if (S.selAudioId != null) {
-        const idx = S.audioBlocks.findIndex(b => b.id === S.selAudioId);
-        if (idx >= 0) {
-          pushTimelineHistory();
-          S.audioBlocks.splice(idx, 1);
-          S.selAudioId = null;
-          autoFitImagesToMusic();
-          refreshAll();
-          toast('Đã xóa đoạn nhạc.');
-        }
-      }
-    });
+    safeClick('#btnCtxDelAudio', deleteSelected);
 
     // Các ô nhập trong thuộc tính câu Lyric (Contextual Lyric)
     safeInput('#inspLyrText', (e: any) => {
@@ -5357,19 +5800,57 @@ export function initStudio() {
       ly.text = e.target.value;
       syncLyrToEditor(false);
     });
+    safeChange('#inspLyrLane', (e: any) => {
+      const ly = selLyr();
+      if (!ly) return;
+      const targetLane = clamp(parseInt(e.target.value, 10) || 0, 0, 3);
+      const endT = (ly.endT && ly.endT > ly.t) ? ly.endT : (ly.t + 3.0);
+      if (!canPlaceInLane(ly.t, endT, targetLane, ly.id)) {
+        toast(`Hàng ${targetLane + 1} đã có câu khác trùng giờ!`);
+        updateInspector();
+        return;
+      }
+      pushLyricHistory();
+      ly.lane = targetLane;
+      renderTimeline();
+      draw();
+      toast(`Đã chuyển câu sang Hàng ${targetLane + 1}`);
+    });
     safeChange('#inspLyrStart', (e: any) => {
       const ly = selLyr();
       if (!ly) return;
       const v = Math.max(0, parseFloat(e.target.value) || 0);
-      ly.t = parseFloat(v.toFixed(2));
+      const curEnd = (ly.endT && ly.endT > ly.t) ? ly.endT : (ly.t + 3.0);
+      const newStart = parseFloat(v.toFixed(2));
+      if (newStart >= curEnd - 0.2) {
+        toast('Giờ bắt đầu phải nhỏ hơn giờ kết thúc ít nhất 0.2s');
+        updateInspector();
+        return;
+      }
+      pushLyricHistory();
+      ly.t = newStart;
+      const curLane = typeof ly.lane === 'number' ? ly.lane : 0;
+      if (!canPlaceInLane(ly.t, curEnd, curLane, ly.id)) {
+        const bestLane = findAvailableLane(ly.t, curEnd, curLane, ly.id);
+        ly.lane = bestLane;
+        toast(`Trùng giờ trên Hàng ${curLane + 1}, đã tự chuyển sang Hàng ${bestLane + 1}`);
+      }
       S.lyr.sort((a, b) => a.t - b.t);
       syncLyrToEditor(true);
     });
     safeChange('#inspLyrEnd', (e: any) => {
       const ly = selLyr();
       if (!ly) return;
-      const v = Math.max(ly.t + 0.1, parseFloat(e.target.value) || (ly.t + 1));
-      ly.endT = parseFloat(v.toFixed(2));
+      const v = parseFloat(e.target.value) || (ly.t + 1);
+      const newEnd = parseFloat(Math.max(ly.t + 0.2, v).toFixed(2));
+      pushLyricHistory();
+      ly.endT = newEnd;
+      const curLane = typeof ly.lane === 'number' ? ly.lane : 0;
+      if (!canPlaceInLane(ly.t, newEnd, curLane, ly.id)) {
+        const bestLane = findAvailableLane(ly.t, newEnd, curLane, ly.id);
+        ly.lane = bestLane;
+        toast(`Trùng giờ trên Hàng ${curLane + 1}, đã tự chuyển sang Hàng ${bestLane + 1}`);
+      }
       syncLyrToEditor(true);
     });
     safeChange('#inspLyrColorDef', (e: any) => {
@@ -5959,6 +6440,17 @@ export function initStudio() {
     safeChange('#sNext', (e: any) => { st.next = e.target.checked; redraw(); });
     safeChange('#sShadow', (e: any) => { st.shadow = e.target.checked; redraw(); });
     safeChange('#sUpper', (e: any) => { st.upper = e.target.checked; redraw(); });
+    safeInput('#sLane2Scale', (e: any) => {
+      const val = clamp(+e.target.value || 80, 40, 150);
+      S.style.lane2Scale = val;
+      const lbl = $('#sLane2ScaleLbl');
+      if (lbl) lbl.textContent = val + '%';
+      redraw();
+    });
+    safeInput('#sLane2Color', (e: any) => {
+      S.style.lane2Color = e.target.value || '#cbd5e1';
+      redraw();
+    });
     safeInput('#tText', async (e: any) => { S.title.text = e.target.value; await loadFonts(); draw(); });
     safeChange('#tDur', (e: any) => { S.title.dur = clamp(+e.target.value || 3, 1, 30); draw(); });
     safeOn('#fileFont', 'change', async (e: any) => {
@@ -6551,6 +7043,7 @@ export function initStudio() {
           selAudioId: S.selAudioId,
           sel: S.sel,
           selLyrId: S.selLyrId,
+          activeTrack: S.activeTrack || 'clip',
           lyr: S.lyr.map(item => ({ ...item })),
           lrcText: formatLrcFromLyr(S.lyr),
           fadeIn: A.fadeIn,
@@ -6560,6 +7053,7 @@ export function initStudio() {
         S.sel = clip.id;
         S.selAudioId = null;
         S.selLyrId = null;
+        S.activeTrack = 'clip';
 
         cDragClip = clip;
         cDragIdx = cIdx;
@@ -6823,6 +7317,7 @@ export function initStudio() {
             selAudioId: S.selAudioId,
             sel: S.sel,
             selLyrId: S.selLyrId,
+            activeTrack: S.activeTrack || 'audio',
             lyr: S.lyr.map(item => ({ ...item })),
             lrcText: ($('#lyr') as HTMLTextAreaElement)?.value || '',
             fadeIn: A.fadeIn,
@@ -6833,6 +7328,7 @@ export function initStudio() {
           S.selAudioId = block.id;
           S.sel = null;
           S.selLyrId = null;
+          S.activeTrack = 'audio';
 
           aDragBlock = block;
           aStartX = e.clientX;
@@ -6934,7 +7430,7 @@ export function initStudio() {
           aDragHasChanged = false;
           try { alaneEl.releasePointerCapture(e.pointerId); } catch (err) {}
           if (dragTip) dragTip.style.display = 'none';
-          autoFitImagesToMusic();
+          if (S.syncWithMusic) autoFitImagesToMusic();
           refreshAll();
         }
       };
@@ -6944,17 +7440,65 @@ export function initStudio() {
 
     // Tương tác trên track Lyric (#llane)
     const llaneEl = $('#llane');
+    const lyrDragGhost = $('#lyrDragGhost');
+    const lyrDragTip = $('#lyrDragTip');
+
     let lyrDragMode: 'body' | 'left' | 'right' | null = null;
     let lyrDragItem: LyricItem | null = null;
     let lyrStartX = 0;
+    let lyrStartY = 0;
     let lyrInitT = 0;
     let lyrInitEndT = 0;
+    let lyrInitLane = 0;
+    let lyrTargetT = 0;
+    let lyrTargetEndT = 0;
+    let lyrTargetLane = 0;
+    let lyrResolvedLane = 0;
+    let lyrHasMoved = false;
+
+    const getLyricSnapTargets = (excludeId?: number): number[] => {
+      const pts = new Set<number>();
+      pts.add(parseFloat(S.t.toFixed(2))); // Playhead
+      S.lyr.forEach(l => {
+        if (l.id !== excludeId) {
+          pts.add(parseFloat(l.t.toFixed(2)));
+          const endT = (l.endT && l.endT > l.t) ? l.endT : (l.t + 3.0);
+          pts.add(parseFloat(endT.toFixed(2)));
+        }
+      });
+      return Array.from(pts);
+    };
+
+    const snapLyricTime = (val: number, snapPts: number[]): { time: number; snapped: boolean } => {
+      // 1. Grid snap (0.1s)
+      let candidate = Math.round(val * 10) / 10;
+      let snapped = false;
+      // 2. Snap points (Playhead, other items within ~6px)
+      const thresholdSec = 6 / S.pps;
+      let minDist = thresholdSec;
+      for (const pt of snapPts) {
+        const diff = Math.abs(val - pt);
+        if (diff < minDist) {
+          minDist = diff;
+          candidate = pt;
+          snapped = true;
+        }
+      }
+      return { time: Math.max(0, parseFloat(candidate.toFixed(2))), snapped };
+    };
 
     if (llaneEl) {
       llaneEl.addEventListener('pointerdown', (e: PointerEvent) => {
         const target = e.target as HTMLElement;
         const blockEl = target.closest('.lyr-block') as HTMLElement | null;
-        if (!blockEl) return;
+        if (!blockEl) {
+          const tlEl = $('#tl');
+          if (tlEl) {
+            const r = tlEl.getBoundingClientRect();
+            seek((e.clientX - r.left) / S.pps);
+          }
+          return;
+        }
 
         e.stopPropagation();
         e.preventDefault();
@@ -6964,19 +7508,29 @@ export function initStudio() {
         if (!ly) return;
 
         selectLyrBlock(ly.id);
-        seek(ly.t);
 
         const handleLeft = target.closest('.lyr-handle.left');
         const handleRight = target.closest('.lyr-handle.right');
 
         lyrDragItem = ly;
         lyrStartX = e.clientX;
+        lyrStartY = e.clientY;
         lyrInitT = ly.t;
-        lyrInitEndT = ly.endT || (ly.t + 3);
+        lyrInitEndT = (ly.endT && ly.endT > ly.t) ? ly.endT : (ly.t + 3.0);
+        lyrInitLane = typeof ly.lane === 'number' ? clamp(ly.lane, 0, 3) : 0;
+        lyrTargetT = lyrInitT;
+        lyrTargetEndT = lyrInitEndT;
+        lyrTargetLane = lyrInitLane;
+        lyrResolvedLane = lyrInitLane;
+        lyrHasMoved = false;
 
-        if (handleLeft) lyrDragMode = 'left';
-        else if (handleRight) lyrDragMode = 'right';
-        else lyrDragMode = 'body';
+        if (handleLeft) {
+          lyrDragMode = 'left';
+        } else if (handleRight) {
+          lyrDragMode = 'right';
+        } else {
+          lyrDragMode = 'body';
+        }
 
         llaneEl.setPointerCapture(e.pointerId);
       });
@@ -6984,34 +7538,143 @@ export function initStudio() {
       llaneEl.addEventListener('pointermove', (e: PointerEvent) => {
         if (!lyrDragMode || !lyrDragItem) return;
         const deltaPx = e.clientX - lyrStartX;
-        const step = e.shiftKey ? 0.01 : 0.05;
-        let deltaSec = deltaPx / S.pps;
-        deltaSec = Math.round(deltaSec / step) * step;
+        const deltaY = e.clientY - lyrStartY;
+        if (Math.abs(deltaPx) > 2 || Math.abs(deltaY) > 2) {
+          lyrHasMoved = true;
+        }
+
+        const snapPts = getLyricSnapTargets(lyrDragItem.id);
+        const curLane = typeof lyrDragItem.lane === 'number' ? lyrDragItem.lane : 0;
 
         if (lyrDragMode === 'left') {
-          const newT = Math.max(0, Math.min(lyrInitT + deltaSec, (lyrDragItem.endT || 999) - 0.2));
-          lyrDragItem.t = parseFloat(newT.toFixed(2));
+          // Tìm câu phía trước trong cùng hàng để chặn không cho chồng
+          let maxPrevEnd = 0;
+          S.lyr.forEach(other => {
+            if (other.id !== lyrDragItem!.id && (other.lane || 0) === curLane && other.t < lyrInitT) {
+              const otherEnd = (other.endT && other.endT > other.t) ? other.endT : (other.t + 3.0);
+              if (otherEnd > maxPrevEnd) maxPrevEnd = otherEnd;
+            }
+          });
+
+          const rawT = lyrInitT + (deltaPx / S.pps);
+          const snapped = snapLyricTime(rawT, snapPts);
+          const minDur = 0.3;
+          const clampedT = clamp(snapped.time, maxPrevEnd, lyrInitEndT - minDur);
+
+          lyrDragItem.t = parseFloat(clampedT.toFixed(2));
+          renderTimeline();
+          draw();
+
+          if (lyrDragTip) {
+            lyrDragTip.style.display = 'block';
+            lyrDragTip.textContent = `◀ Bắt đầu: ${fmt(lyrDragItem.t)} | Dài: ${(lyrInitEndT - lyrDragItem.t).toFixed(2)}s [Hàng ${curLane + 1}]`;
+            const tlScroll = $('#tlScroll');
+            const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, width: 600 };
+            lyrDragTip.style.left = clamp(e.clientX - tlRect.left, 20, tlRect.width - 240) + 'px';
+            lyrDragTip.style.top = '110px';
+          }
+
         } else if (lyrDragMode === 'right') {
-          const newEnd = Math.max(lyrDragItem.t + 0.2, lyrInitEndT + deltaSec);
-          lyrDragItem.endT = parseFloat(newEnd.toFixed(2));
+          // Tìm câu phía sau trong cùng hàng để chặn không cho chồng
+          let minNextStart = 999999;
+          S.lyr.forEach(other => {
+            if (other.id !== lyrDragItem!.id && (other.lane || 0) === curLane && other.t >= lyrInitT) {
+              if (other.t < minNextStart) minNextStart = other.t;
+            }
+          });
+
+          const rawEndT = lyrInitEndT + (deltaPx / S.pps);
+          const snapped = snapLyricTime(rawEndT, snapPts);
+          const minDur = 0.3;
+          const clampedEndT = clamp(snapped.time, lyrInitT + minDur, minNextStart);
+
+          lyrDragItem.endT = parseFloat(clampedEndT.toFixed(2));
+          renderTimeline();
+          draw();
+
+          if (lyrDragTip) {
+            lyrDragTip.style.display = 'block';
+            lyrDragTip.textContent = `▶ Kết thúc: ${fmt(lyrDragItem.endT)} | Dài: ${(lyrDragItem.endT - lyrInitT).toFixed(2)}s [Hàng ${curLane + 1}]`;
+            const tlScroll = $('#tlScroll');
+            const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, width: 600 };
+            lyrDragTip.style.left = clamp(e.clientX - tlRect.left, 20, tlRect.width - 240) + 'px';
+            lyrDragTip.style.top = '110px';
+          }
+
         } else if (lyrDragMode === 'body') {
-          const dur = (lyrDragItem.endT || (lyrDragItem.t + 3)) - lyrDragItem.t;
-          const newT = Math.max(0, lyrInitT + deltaSec);
-          lyrDragItem.t = parseFloat(newT.toFixed(2));
-          lyrDragItem.endT = parseFloat((newT + dur).toFixed(2));
+          const dur = lyrInitEndT - lyrInitT;
+          const rawT = lyrInitT + (deltaPx / S.pps);
+          const snapped = snapLyricTime(rawT, snapPts);
+          lyrTargetT = Math.max(0, snapped.time);
+          lyrTargetEndT = parseFloat((lyrTargetT + dur).toFixed(2));
+
+          const laneDelta = Math.round(deltaY / 30);
+          lyrTargetLane = clamp(lyrInitLane + laneDelta, 0, 3);
+
+          const isDirectFree = canPlaceInLane(lyrTargetT, lyrTargetEndT, lyrTargetLane, lyrDragItem.id);
+          lyrResolvedLane = isDirectFree
+            ? lyrTargetLane
+            : findAvailableLane(lyrTargetT, lyrTargetEndT, lyrTargetLane, lyrDragItem.id);
+
+          // Hiển thị Ghost mờ mờ trên timeline
+          if (lyrDragGhost) {
+            lyrDragGhost.style.display = 'block';
+            lyrDragGhost.style.left = (lyrTargetT * S.pps) + 'px';
+            lyrDragGhost.style.top = (144 + lyrResolvedLane * 30 + 2) + 'px';
+            lyrDragGhost.style.width = Math.max(24, dur * S.pps - 2) + 'px';
+            lyrDragGhost.style.borderColor = isDirectFree ? 'var(--accent)' : '#f59e0b';
+            lyrDragGhost.textContent = lyrDragItem.text;
+          }
+
+          if (lyrDragTip) {
+            lyrDragTip.style.display = 'block';
+            if (isDirectFree) {
+              lyrDragTip.textContent = `Hàng ${lyrTargetLane + 1} • ${fmt(lyrTargetT)} ➔ ${fmt(lyrTargetEndT)} (${dur.toFixed(2)}s)`;
+            } else {
+              lyrDragTip.textContent = `Hàng ${lyrTargetLane + 1} trùng giờ! ➔ Tự nhảy Hàng ${lyrResolvedLane + 1} • ${fmt(lyrTargetT)}`;
+            }
+            const tlScroll = $('#tlScroll');
+            const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, width: 600 };
+            lyrDragTip.style.left = clamp(e.clientX - tlRect.left, 20, tlRect.width - 260) + 'px';
+            lyrDragTip.style.top = (144 + lyrResolvedLane * 30 - 24) + 'px';
+          }
         }
-        renderTimeline();
-        draw();
       });
 
       const endLyrDrag = (e: PointerEvent) => {
-        if (lyrDragMode) {
-          lyrDragMode = null;
-          lyrDragItem = null;
-          try { llaneEl.releasePointerCapture(e.pointerId); } catch (err) {}
-          syncLyrToEditor(true);
+        if (!lyrDragMode) return;
+
+        if (lyrDragGhost) lyrDragGhost.style.display = 'none';
+        if (lyrDragTip) lyrDragTip.style.display = 'none';
+
+        if (lyrDragMode === 'body') {
+          if (lyrHasMoved && lyrDragItem) {
+            pushLyricHistory();
+            lyrDragItem.t = lyrTargetT;
+            lyrDragItem.endT = lyrTargetEndT;
+            lyrDragItem.lane = lyrResolvedLane;
+            S.lyr.sort((a, b) => a.t - b.t);
+            syncLyrToEditor(true);
+            seek(lyrTargetT);
+            toast(`Đã xếp câu vào Hàng ${lyrResolvedLane + 1} [${fmt(lyrTargetT)} ➔ ${fmt(lyrTargetEndT)}]`);
+          } else if (lyrDragItem) {
+            seek(lyrDragItem.t);
+          }
+        } else if (lyrDragMode === 'left' || lyrDragMode === 'right') {
+          if (lyrHasMoved && lyrDragItem) {
+            pushLyricHistory();
+            S.lyr.sort((a, b) => a.t - b.t);
+            syncLyrToEditor(true);
+            toast(`Đã chỉnh độ dài câu: ${(lyrDragItem.endT - lyrDragItem.t).toFixed(2)}s`);
+          }
         }
+
+        try { llaneEl.releasePointerCapture(e.pointerId); } catch (err) {}
+        lyrDragMode = null;
+        lyrDragItem = null;
+        lyrHasMoved = false;
       };
+
       llaneEl.addEventListener('pointerup', endLyrDrag);
       llaneEl.addEventListener('pointercancel', endLyrDrag);
 
@@ -7025,6 +7688,18 @@ export function initStudio() {
           showLyrInlineEditor(ly, blockEl);
         }
       });
+    }
+
+    // Nút "+ Thêm câu" nhanh trên thanh công cụ timeline
+    safeClick('#btnTlAddLyrQuick', addLyricAtPlayhead);
+
+    // Đồng bộ cuộn dọc giữa Timeline và cột track name bên trái
+    const tlScrollEl = $('#tlScroll');
+    const tlFixedColEl = $('#tlFixedCol');
+    if (tlScrollEl && tlFixedColEl) {
+      tlScrollEl.addEventListener('scroll', () => {
+        tlFixedColEl.scrollTop = tlScrollEl.scrollTop;
+      }, { passive: true });
     }
 
     // Lyric toolbar buttons

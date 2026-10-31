@@ -510,6 +510,21 @@ export default function App() {
               <label className="chk">
                 <input id="sShadow" type="checkbox" defaultChecked /> Đổ bóng
               </label>
+
+              <div className="field" style={{ marginTop: '8px', borderTop: '1px solid var(--line)', paddingTop: '10px' }}>
+                <label style={{ fontWeight: 700, color: 'var(--accent)', fontSize: '12px' }}>Kiểu chữ Hàng 2 trở đi (Song ngữ / Dịch nghĩa)</label>
+                <div className="row2" style={{ marginTop: '6px' }}>
+                  <div className="field">
+                    <label htmlFor="sLane2Scale">Cỡ chữ (% hàng 1)</label>
+                    <input id="sLane2Scale" type="number" min="40" max="150" step="5" defaultValue="80" />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="sLane2Color">Màu chữ hàng 2+</label>
+                    <input id="sLane2Color" type="color" defaultValue="#cbd5e1" />
+                  </div>
+                </div>
+              </div>
+
               <div className="field">
                 <label htmlFor="tText">Tiêu đề đầu video</label>
                 <input id="tText" type="text" placeholder="Ví dụ: Hoa nở bên tường - Ca sĩ" />
@@ -815,6 +830,16 @@ export default function App() {
                 </div>
               </div>
 
+              <div className="field">
+                <label htmlFor="inspLyrLane">Hàng hiển thị trên timeline</label>
+                <select id="inspLyrLane" defaultValue="0">
+                  <option value="0">Hàng 1 (Chính)</option>
+                  <option value="1">Hàng 2 (Dịch / Phụ)</option>
+                  <option value="2">Hàng 3</option>
+                  <option value="3">Hàng 4</option>
+                </select>
+              </div>
+
               <div className="row2">
                 <div className="field">
                   <label htmlFor="inspLyrColor">Màu chữ câu</label>
@@ -927,6 +952,10 @@ export default function App() {
               <span>+ Thêm nhạc</span>
             </label>
 
+            <button className="tl-tool-btn" id="btnTlAddLyrQuick" type="button" title="Thêm câu lyric mới dài 2s tại đầu phát">
+              <span>➕ Thêm câu</span>
+            </button>
+
             <span className="tl-divider"></span>
 
             <button className="tl-tool-btn" id="btnTlCloseGaps" type="button" title="Xóa khoảng trống giữa các đoạn nhạc">
@@ -955,11 +984,14 @@ export default function App() {
 
         {/* THÂN TIMELINE GỒM CỘT TIÊU ĐỀ 90px VÀ TRACK CUỘN NGANG */}
         <div className="timeline-body">
-          <div className="tl-fixed-column">
+          <div className="tl-fixed-column" id="tlFixedCol">
             <div className="tl-col-ruler-space"></div>
             <div className="tl-col-lane lane-clip">🖼️ CLIP</div>
             <div className="tl-col-lane lane-audio">♫ NHẠC</div>
-            <div className="tl-col-lane lane-lyric">📝 LYRIC</div>
+            <div className="tl-col-lane lane-lyric" id="tlColLyr">
+              <span className="tl-lyr-title">📝 LYRIC</span>
+              <div className="tl-col-lane-subrows" id="tlColLyrSubrows"></div>
+            </div>
           </div>
 
           <div className="tl-scroll-area" id="tlScroll">
@@ -969,6 +1001,8 @@ export default function App() {
               <div className="alane" id="alane"></div>
               <div className="llane" id="llane"></div>
               <div id="ph"></div>
+              <div id="lyrDragGhost" className="lyr-drag-ghost" style={{ display: 'none' }}></div>
+              <div id="lyrDragTip" className="lyr-drag-tip" style={{ display: 'none' }}></div>
               <div id="audioDragTip" style={{ display: 'none' }}></div>
             </div>
           </div>
