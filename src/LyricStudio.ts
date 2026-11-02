@@ -8494,24 +8494,28 @@ export function initStudio() {
 
   // Bộ quan sát kích thước thanh công cụ & khung preview (Adaptive Toolbars & Viewport)
   let studioResizeObs: ResizeObserver | null = null;
+  let roRaf = 0;
   const headerEl = document.querySelector('.studio-header') as HTMLElement | null;
   const tlToolbarEl = document.querySelector('.timeline-toolbar') as HTMLElement | null;
   const vpEl = $('#stageViewport');
 
   if (typeof ResizeObserver !== 'undefined') {
     studioResizeObs = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const w = entry.contentRect.width;
-        if (entry.target === headerEl && headerEl) {
-          headerEl.classList.toggle('toolbar-compact', w < 760);
-          headerEl.classList.toggle('toolbar-ultra-compact', w < 540);
-        } else if (entry.target === tlToolbarEl && tlToolbarEl) {
-          tlToolbarEl.classList.toggle('toolbar-compact', w < 960);
-          tlToolbarEl.classList.toggle('toolbar-ultra-compact', w < 620);
-        } else if (entry.target === vpEl) {
-          fitStage();
+      cancelAnimationFrame(roRaf);
+      roRaf = requestAnimationFrame(() => {
+        for (const entry of entries) {
+          const w = entry.contentRect.width;
+          if (entry.target === headerEl && headerEl) {
+            headerEl.classList.toggle('toolbar-compact', w < 760);
+            headerEl.classList.toggle('toolbar-ultra-compact', w < 540);
+          } else if (entry.target === tlToolbarEl && tlToolbarEl) {
+            tlToolbarEl.classList.toggle('toolbar-compact', w < 960);
+            tlToolbarEl.classList.toggle('toolbar-ultra-compact', w < 620);
+          } else if (entry.target === vpEl) {
+            fitStage();
+          }
         }
-      }
+      });
     });
 
     if (headerEl) studioResizeObs.observe(headerEl);
@@ -8527,6 +8531,7 @@ export function initStudio() {
     if (A.isTrimPreviewing) stopTrimPreview();
     if (S.viz.logoUrl) URL.revokeObjectURL(S.viz.logoUrl);
     cancelAnimationFrame(vuRaf);
+    cancelAnimationFrame(roRaf);
     if (studioResizeObs) studioResizeObs.disconnect();
     document.removeEventListener('dragover', onDragOver);
     document.removeEventListener('dragleave', onDragLeave);
