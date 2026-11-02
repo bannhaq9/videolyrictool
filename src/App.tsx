@@ -36,23 +36,29 @@ export default function App() {
           </div>
         </div>
 
-        <div className="header-center">
+        <div className="header-center" id="headerCenter">
           <button type="button" className="header-btn" id="btnTopUndo" title="Hoàn tác (Ctrl+Z)" disabled>
             <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
               <path d="M12.5 8c-2.65 0-5.05 1-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/>
             </svg>
-            <span>Hoàn tác</span>
+            <span className="btn-text">Hoàn tác</span>
           </button>
           <button type="button" className="header-btn" id="btnTopRedo" title="Làm lại (Ctrl+Y)" disabled>
             <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
               <path d="M18.4 10.6C16.55 9 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z"/>
             </svg>
-            <span>Làm lại</span>
+            <span className="btn-text">Làm lại</span>
+          </button>
+          <button type="button" className="header-btn" id="btnFocusMode" title="Chế độ Tập trung / Xem lớn (Phím Tab)">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+            </svg>
+            <span className="btn-text">Tập trung (Tab)</span>
           </button>
         </div>
 
-        <div className="header-right">
-          <div className="segmented-control" role="group" aria-label="Tỷ lệ khung hình">
+        <div className="header-right" id="headerRight">
+          <div className="segmented-control hdr-item-orient" role="group" aria-label="Tỷ lệ khung hình">
             <button id="oV" aria-pressed="true" title="Khung dọc 9:16 (TikTok, Reels, Shorts)">
               <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><rect x="4" y="1" width="8" height="14" rx="1.5" /></svg>
               <span>9:16</span>
@@ -63,7 +69,7 @@ export default function App() {
             </button>
           </div>
 
-          <select id="res" aria-label="Độ phân giải" className="quality-select">
+          <select id="res" aria-label="Độ phân giải" className="quality-select hdr-item-quality">
             <option value="720">720p (nhanh)</option>
             <option value="1080">1080p (nét)</option>
           </select>
@@ -72,8 +78,34 @@ export default function App() {
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 19V5M5 12l7-7 7 7"/>
             </svg>
-            <span>Xuất video</span>
+            <span className="btn-text">Xuất video</span>
           </button>
+
+          {/* Nút ba chấm gom mục khi hẹp */}
+          <div className="header-overflow-wrap" id="headerOverflowWrap">
+            <button type="button" className="header-btn icon-only" id="btnHeaderOverflow" title="Tùy chọn khác">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <circle cx="12" cy="5" r="2" />
+                <circle cx="12" cy="12" r="2" />
+                <circle cx="12" cy="19" r="2" />
+              </svg>
+            </button>
+            <div className="header-overflow-dropdown" id="headerOverflowDropdown" hidden>
+              <div className="overflow-group">
+                <span className="overflow-group-title">Tỷ lệ & Độ nét</span>
+                <div className="overflow-row">
+                  <button type="button" className="overflow-item-btn" id="oV2" title="9:16">📱 9:16 Dọc</button>
+                  <button type="button" className="overflow-item-btn" id="oH2" title="16:9">💻 16:9 Ngang</button>
+                </div>
+                <div className="overflow-row" style={{ marginTop: '4px' }}>
+                  <select id="res2" className="quality-select" style={{ width: '100%' }}>
+                    <option value="720">720p (nhanh)</option>
+                    <option value="1080">1080p (nét)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -420,23 +452,126 @@ export default function App() {
                 </div>
               </div>
 
-              <div id="lyrStep2Pane" style={{ display: 'none', gap: '10px' }}>
-                <div className="lyr-tap-stage">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span id="lyrTapCounter" className="badge success">Câu 1 / 1</span>
-                    <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Phím <strong>Space</strong></span>
-                  </div>
-                  <div id="lyrTapPrev" style={{ fontSize: '11px', color: 'var(--muted)' }}>(Bắt đầu từ câu đầu tiên)</div>
-                  <div id="lyrTapCurrent" className="lyr-tap-current">(Chưa có lời. Nhập lời ở Bước 1)</div>
-                  <div id="lyrTapNext" style={{ fontSize: '11px', color: 'var(--muted)' }}></div>
-                  <button className="btn pri" id="btnTapMarkNow" type="button" style={{ padding: '12px', fontSize: '14px', fontWeight: 700 }}>
-                    ⚡ Bắt đầu câu này (Phím Space)
+              <div id="lyrStep2Pane" style={{ display: 'none', flexDirection: 'column', gap: '10px' }}>
+                {/* Cảnh báo khi chưa có nhạc */}
+                <div id="lyrNoAudioNotice" style={{ display: 'none', padding: '20px 14px', background: 'var(--panel2)', border: '1px dashed var(--line)', borderRadius: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '28px', marginBottom: '8px' }}>🎵</div>
+                  <div style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--fg)', marginBottom: '4px' }}>Thêm nhạc trước khi căn giờ</div>
+                  <div style={{ fontSize: '11.5px', color: 'var(--muted)', marginBottom: '14px', lineHeight: 1.4 }}>Tính năng căn giờ bắt nhịp cần có bài hát để nghe và khớp từng câu.</div>
+                  <button className="btn pri" id="btnStep2AddAudio" type="button" style={{ margin: '0 auto', padding: '8px 16px' }}>
+                    + Thêm file nhạc
                   </button>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px' }}>
-                  <button className="btn sm" id="btnTapUndoLine" type="button">↩ Hoàn tác</button>
-                  <button className="btn sm" id="btnTapSkipLine" type="button">⏩ Bỏ qua</button>
-                  <button className="btn sm pri" id="btnTapGoStep3" type="button">Bước 3 ➔</button>
+
+                {/* Khung căn giờ chính */}
+                <div id="lyrTapContainer" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {/* Bộ chuyển chế độ: Giữ vs Bấm */}
+                  <div className="lyr-mode-selector">
+                    <button type="button" className="lyr-mode-btn active" id="btnLyrModeHold" data-mode="hold" title="Giữ phím khi câu đang hát (Nhấn = Bắt đầu, Nhả = Kết thúc)">
+                      🔘 Chế độ Giữ (Mặc định)
+                    </button>
+                    <button type="button" className="lyr-mode-btn" id="btnLyrModeTap" data-mode="tap" title="Bấm phím đúng lúc câu bắt đầu (Câu trước tự kết thúc)">
+                      ⚡ Chế độ Bấm
+                    </button>
+                  </div>
+
+                  {/* Thanh công cụ phụ: Bù trễ phản xạ & Tốc độ phát */}
+                  <div className="lyr-subtools-row">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <label htmlFor="lyrLatencyInput" style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Bù trễ:</label>
+                      <input id="lyrLatencyInput" type="number" min="-0.5" max="0.5" step="0.05" defaultValue="0.15" style={{ width: '64px', padding: '3px 6px', fontSize: '11.5px', fontFamily: 'var(--font-mono)' }} />
+                      <span style={{ fontSize: '11px', color: 'var(--muted)' }}>s</span>
+                      <button className="btn sm" id="btnTestLatency" type="button" title="Nghe thử bù trễ trên câu vừa căn" style={{ padding: '3px 8px', fontSize: '11px' }}>
+                        🎧 Thử
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}>
+                      <span style={{ fontSize: '10.5px', color: 'var(--muted)', marginRight: '2px' }}>Tốc độ:</span>
+                      <button type="button" className="speed-chip-btn" data-speed="0.5">0.5x</button>
+                      <button type="button" className="speed-chip-btn" data-speed="0.75">0.75x</button>
+                      <button type="button" className="speed-chip-btn active" data-speed="1.0">1.0x</button>
+                    </div>
+                  </div>
+
+                  {/* Canvas sóng nhạc mini ±5s quanh playhead */}
+                  <div className="lyr-mini-waveform-box">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                      <span style={{ fontSize: '10.5px', color: 'var(--muted)', fontWeight: 600 }}>Sóng nhạc xung quanh (±5s)</span>
+                      <span id="lyrMiniWfTime" style={{ fontSize: '10.5px', fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>00:00.00</span>
+                    </div>
+                    <canvas id="lyrMiniWfCanvas" width={320} height={42} style={{ width: '100%', height: '42px', borderRadius: '6px', background: '#0a0f1d' }}></canvas>
+                  </div>
+
+                  {/* Vùng sân khấu hiển thị câu hát lớn */}
+                  <div className="lyr-tap-stage" id="lyrTapStage">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span id="lyrTapCounter" className="badge success">Câu 1 / 1</span>
+                        <select id="lyrSelectActiveSentence" style={{ padding: '2px 6px', fontSize: '11px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: '6px', color: 'var(--fg)', maxWidth: '140px' }} title="Chọn câu để bắt đầu căn"></select>
+                      </div>
+                      <span id="lyrTapModeHint" style={{ fontSize: '11px', color: 'var(--muted)' }}>Giữ <strong>Space</strong> khi hát</span>
+                    </div>
+
+                    {/* Câu trước (mờ đi) */}
+                    <div id="lyrTapPrev" className="lyr-tap-prev">(Bắt đầu từ câu đầu tiên)</div>
+
+                    {/* Câu đang chờ (RẤT TO Ở GIỮA) */}
+                    <div id="lyrTapCurrent" className="lyr-tap-current" tabIndex={0}>
+                      (Chưa có lời. Nhập lời ở Bước 1)
+                    </div>
+
+                    {/* Câu kế tiếp (nhỏ phía dưới) */}
+                    <div id="lyrTapNext" className="lyr-tap-next"></div>
+
+                    {/* NÚT BẤM / GIỮ TO */}
+                    <button className="btn pri lyr-big-tap-btn" id="btnTapActionBig" type="button">
+                      <span id="btnTapActionIcon">🔘</span>
+                      <span id="btnTapActionLabel">GIỮ để ghi âm câu này (Phím Space)</span>
+                    </button>
+                  </div>
+
+                  {/* Thanh thông báo kết quả & nghe lại câu vừa đặt */}
+                  <div id="lyrLastResultBox" style={{ display: 'none', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(20, 184, 166, 0.15)', border: '1px solid var(--accent)', borderRadius: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--accent)', fontWeight: 700 }} id="lyrLastResultLabel">Câu #1: 00:00.00 ➔ 00:03.00</span>
+                    </div>
+                    <button className="btn sm" id="btnReplayLastLine" type="button" style={{ padding: '2px 8px', fontSize: '11px' }}>
+                      ▶ Nghe lại câu này
+                    </button>
+                  </div>
+
+                  {/* Thanh công cụ khi tạm dừng: Đặt mốc tại playhead */}
+                  <div className="lyr-pause-tools">
+                    <span style={{ fontSize: '10.5px', color: 'var(--muted)', fontWeight: 600 }}>Khi tạm dừng / kéo playhead:</span>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      <button className="btn sm" id="btnSetStartAtHead" type="button" title="Đặt đầu câu tại vị trí playhead hiện tại (Enter)">
+                        📍 Đặt giờ bắt đầu (Enter)
+                      </button>
+                      <button className="btn sm" id="btnSetEndAtHead" type="button" title="Đặt đuôi câu tại vị trí playhead hiện tại (Shift+Enter)">
+                        🏁 Đặt giờ kết thúc (Shift+Enter)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Danh sách các câu chưa căn giờ (nếu có) */}
+                  <div id="lyrUnsyncedBox" style={{ display: 'none', flexDirection: 'column', gap: '4px', padding: '8px', background: 'var(--panel2)', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                    <span style={{ fontSize: '11px', color: '#f59e0b', fontWeight: 600 }}>⚠️ Các câu chưa có giờ:</span>
+                    <div id="lyrUnsyncedList" style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', maxHeight: '60px', overflowY: 'auto' }}></div>
+                  </div>
+
+                  {/* Hàng nút điều hướng dưới cùng */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px', paddingTop: '4px' }}>
+                    <button className="btn sm" id="btnTapUndoLine" type="button" title="Hủy lần đặt gần nhất và lùi nhạc 3s (Backspace)">
+                      ↩ Hoàn tác (Backspace)
+                    </button>
+                    <button className="btn sm" id="btnTapSkipLine" type="button" title="Bỏ qua câu này">
+                      ⏩ Bỏ qua
+                    </button>
+                    <button className="btn sm pri" id="btnTapPreviewFull" type="button" title="Chạy thử toàn bộ video với lyric thật rồi sang Bước 3">
+                      ▶ Chạy thử toàn bài ➔ Bước 3
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -625,66 +760,7 @@ export default function App() {
               </div>
             </div>
           </div>
-
-          {/* THANH ĐIỀU KHIỂN PHÁT XẾP NGANG */}
-          <div className="studio-transport">
-            <div className="transport-btns-row">
-              <button type="button" className="transport-round-btn" id="bStart" title="Về đầu (00:00)">
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
-                  <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
-                </svg>
-              </button>
-
-              <button type="button" className="transport-round-btn" id="bStepBack5" title="Lùi 5 giây">
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4">
-                  <path d="M1 4v6h6M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
-                </svg>
-              </button>
-
-              <button type="button" className="transport-round-btn play-btn" id="bPlay" title="Phát / Tạm dừng (Phím Space)" aria-label="Phát">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                  <path d="M8 5v14l11-7z"/>
-                </svg>
-              </button>
-
-              <button type="button" className="transport-round-btn" id="bStepFwd5" title="Tiến 5 giây">
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4">
-                  <path d="M23 4v6h-6M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-                </svg>
-              </button>
-
-              <button type="button" className="transport-round-btn" id="bStop" title="Dừng hẳn và về 00:00">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                  <rect x="5" y="5" width="14" height="14" rx="2" />
-                </svg>
-              </button>
-            </div>
-
-            <span className="transport-timecode" id="timeLbl">00:00.00 / 00:04.00</span>
-            <input id="scrub" type="range" min="0" max="0" step="0.01" defaultValue="0" style={{ display: 'none' }} />
-
-            <div className="transport-vol-box" title="Âm lượng (Phím M tắt/bật)">
-              <button type="button" id="bMute" className="transport-round-btn" style={{ width: '26px', height: '26px', border: 'none', background: 'transparent' }} title="Tắt / Bật tiếng (Phím M)">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                  <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-                </svg>
-              </button>
-              <input id="stageVol" type="range" min="0" max="1" step="0.01" defaultValue="1" className="transport-vol-slider" aria-label="Âm lượng" />
-              <span id="stageVolLbl" className="transport-vol-percent">100%</span>
-            </div>
-
-            <button type="button" className="transport-round-btn" id="btnFullscreen" title="Toàn màn hình preview">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-              </svg>
-            </button>
-
-            <button type="button" className="transport-round-btn" id="btnToggleRightPanelTransport" title="Bật / Thu gọn bảng thuộc tính">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
-                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5-2h4V7h-4v10z"/>
-              </svg>
-            </button>
-          </div>
+          <input id="scrub" type="range" min="0" max="0" step="0.01" defaultValue="0" style={{ display: 'none' }} />
         </div>
 
         {/* 5. PANEL BÊN PHẢI THEO NGỮ CẢNH (CONTEXTUAL INSPECTOR 290px) */}
@@ -931,35 +1007,56 @@ export default function App() {
 
       {/* 6. TIMELINE Ở ĐÁY (MẶC ĐỊNH ~200px) */}
       <section className="studio-timeline" aria-label="Dòng thời gian chỉnh sửa">
-        {/* THANH CÔNG CỤ TIMELINE GỌN 1 HÀNG (ĐÃ BỎ FADE TRÙNG) */}
-        <div className="timeline-toolbar">
+        {/* THANH CÔNG CỤ TIMELINE GỌN GÀNG TỰ CO GIÃN */}
+        <div className="timeline-toolbar" id="timelineToolbar">
+          {/* NHÓM 1: CÔNG CỤ BIÊN TẬP CỐT LÕI */}
           <div className="tl-tools-left">
-            <button className="tl-tool-btn" id="btnTlSplit" type="button" title="Tách đoạn tại đầu phát (Phím S)">
-              <span>✂️ Tách (S)</span>
+            <button className="tl-tool-btn pri-action" id="btnTlSplit" type="button" title="Tách đoạn tại đầu phát (Phím S)">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="6" cy="6" r="3"></circle>
+                <circle cx="6" cy="18" r="3"></circle>
+                <line x1="20" y1="4" x2="8.12" y2="15.88"></line>
+                <line x1="14.47" y1="14.48" x2="20" y2="20"></line>
+                <line x1="8.12" y1="8.12" x2="12" y2="12"></line>
+              </svg>
+              <span className="btn-text">Tách (S)</span>
             </button>
-            <button className="tl-tool-btn danger" id="btnTlDelete" type="button" title="Xóa phần đang chọn (Phím Delete)">
-              <span>🗑️ Xóa</span>
+
+            <button className="tl-tool-btn danger pri-action" id="btnTlDelete" type="button" title="Xóa phần đang chọn (Phím Delete)">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              <span className="btn-text">Xóa</span>
             </button>
 
             <span className="tl-divider"></span>
 
-            <label className="tl-tool-btn" htmlFor="fileMedia2" style={{ cursor: 'pointer' }} title="Thêm ảnh hoặc video">
-              <span>+ Thêm clip</span>
+            <label className="tl-tool-btn sec-action" htmlFor="fileMedia2" style={{ cursor: 'pointer' }} title="Thêm ảnh hoặc video">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span className="btn-text">+ Clip</span>
             </label>
             <input id="fileMedia2" type="file" accept="image/*,video/*" multiple hidden />
 
-            <label className="tl-tool-btn" htmlFor="fileAudio" style={{ cursor: 'pointer' }} title="Thêm nhạc vào bài">
-              <span>+ Thêm nhạc</span>
+            <label className="tl-tool-btn sec-action" htmlFor="fileAudio" style={{ cursor: 'pointer' }} title="Thêm nhạc vào bài">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+              </svg>
+              <span className="btn-text">+ Nhạc</span>
             </label>
 
-            <button className="tl-tool-btn" id="btnTlAddLyrQuick" type="button" title="Thêm câu lyric mới dài 2s tại đầu phát">
-              <span>➕ Thêm câu</span>
+            <button className="tl-tool-btn sec-action" id="btnTlAddLyrQuick" type="button" title="Thêm câu lyric mới dài 2s tại đầu phát">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V8h10v2z"/>
+              </svg>
+              <span className="btn-text">+ Câu</span>
             </button>
 
-            <span className="tl-divider"></span>
-
-            <button className="tl-tool-btn" id="btnTlCloseGaps" type="button" title="Xóa khoảng trống giữa các đoạn nhạc">
-              <span>⚡ Nối khoảng trống</span>
+            <button className="tl-tool-btn opt-action" id="btnTlCloseGaps" type="button" title="Xóa khoảng trống giữa các đoạn nhạc">
+              <span>⚡ Nối trống</span>
             </button>
 
             {/* Hidden fallback elements */}
@@ -973,12 +1070,84 @@ export default function App() {
             <button id="btnTlRedo" style={{ display: 'none' }} type="button">Redo</button>
           </div>
 
+          {/* NHÓM 2: BỘ ĐIỀU KHIỂN PHÁT HỢP NHẤT VÀO TIMELINE */}
+          <div className="tl-tools-center" id="tlToolsCenter">
+            <div className="transport-btns-cluster">
+              <button type="button" className="transport-round-btn sm" id="bStart" title="Về đầu (00:00)">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+                  <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+                </svg>
+              </button>
+
+              <button type="button" className="transport-round-btn sm" id="bStepBack5" title="Lùi 5 giây (Mũi tên trái)">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4">
+                  <path d="M1 4v6h6M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                </svg>
+              </button>
+
+              <button type="button" className="transport-round-btn play-btn" id="bPlay" title="Phát / Tạm dừng (Phím Space)" aria-label="Phát">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </button>
+
+              <button type="button" className="transport-round-btn sm" id="bStepFwd5" title="Tiến 5 giây (Mũi tên phải)">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4">
+                  <path d="M23 4v6h-6M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+              </button>
+
+              <button type="button" className="transport-round-btn sm" id="bStop" title="Dừng hẳn và về 00:00">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                  <rect x="5" y="5" width="14" height="14" rx="2" />
+                </svg>
+              </button>
+            </div>
+
+            <span className="transport-timecode" id="timeLbl">00:00.00 / 00:04.00</span>
+
+            <div className="transport-vol-box" title="Âm lượng (Phím M tắt/bật)">
+              <button type="button" id="bMute" className="transport-round-btn" style={{ width: '22px', height: '22px', border: 'none', background: 'transparent' }} title="Tắt / Bật tiếng (Phím M)">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                  <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                </svg>
+              </button>
+              <input id="stageVol" type="range" min="0" max="1" step="0.01" defaultValue="1" className="transport-vol-slider" aria-label="Âm lượng" />
+              <span id="stageVolLbl" className="transport-vol-percent">100%</span>
+            </div>
+
+            <button type="button" className="transport-round-btn sm" id="btnFullscreen" title="Toàn màn hình preview">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+              </svg>
+            </button>
+
+            <button type="button" className="transport-round-btn sm" id="btnToggleRightPanelTransport" title="Bật / Thu gọn bảng thuộc tính">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5-2h4V7h-4v10z"/>
+              </svg>
+            </button>
+          </div>
+
+          {/* NHÓM 3: THU PHÓNG & TIỆN ÍCH */}
           <div className="tl-tools-right">
             <button type="button" className="tl-tool-btn" id="btnTlZoomOut" title="Thu nhỏ timeline">－</button>
-            <input id="zoom" type="range" min="15" max="200" step="5" defaultValue="60" style={{ width: '80px', accentColor: 'var(--accent)' }} title="Thu phóng timeline" />
+            <input id="zoom" type="range" min="15" max="200" step="5" defaultValue="60" className="tl-zoom-slider" title="Thu phóng timeline" />
             <button type="button" className="tl-tool-btn" id="btnTlZoomIn" title="Phóng to timeline">＋</button>
-            <button type="button" className="tl-tool-btn" id="btnTlFitZoom" title="Thu phóng vừa toàn bộ timeline">📐 Vừa khung</button>
-            <button type="button" className="tl-tool-btn" id="btnKbShortcuts" title="Xem danh sách phím tắt">⌨️ Phím tắt</button>
+            <button type="button" className="tl-tool-btn opt-action" id="btnTlFitZoom" title="Thu phóng vừa toàn bộ timeline">📐 Vừa khung</button>
+            <button type="button" className="tl-tool-btn opt-action" id="btnKbShortcuts" title="Xem danh sách phím tắt">⌨️ Phím tắt</button>
+
+            {/* Nút ba chấm cho timeline */}
+            <div className="tl-overflow-wrap" id="tlOverflowWrap">
+              <button type="button" className="tl-tool-btn icon-only" id="btnTlOverflow" title="Tùy chọn khác">
+                ⋯
+              </button>
+              <div className="tl-overflow-dropdown" id="tlOverflowDropdown" hidden>
+                <button type="button" className="overflow-item-btn" id="btnTlFitZoom2">📐 Thu phóng vừa khung</button>
+                <button type="button" className="overflow-item-btn" id="btnTlCloseGaps2">⚡ Nối khoảng trống</button>
+                <button type="button" className="overflow-item-btn" id="btnKbShortcuts2">⌨️ Danh sách phím tắt</button>
+              </div>
+            </div>
           </div>
         </div>
 

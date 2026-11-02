@@ -1,6 +1,28 @@
 @import "tailwindcss";
 
 :root {
+  /* 1. ĐƠN VỊ GỐC CO GIÃN THỰC TẾ (INTRINSIC SCALING UNIT) */
+  --u: clamp(0.75rem, 0.55rem + 0.55vmin, 1.1rem);
+
+  /* Các biến phụ thuộc trực tiếp vào --u */
+  --btn-h: calc(2.2 * var(--u));
+  --radius: calc(0.5 * var(--u));
+  --font-base: calc(0.92 * var(--u));
+  --font-sm: calc(0.82 * var(--u));
+  --font-xs: calc(0.74 * var(--u));
+  --dock-w: calc(3.6 * var(--u));
+  --drawer-w: clamp(14rem, 20vw, 24rem);
+  --header-h: calc(3.4 * var(--u));
+  --tl-height: clamp(8rem, 28dvh, 40dvh);
+
+  /* Chiều cao các làn trên timeline */
+  --clip-track-h: calc(4.5 * var(--u));
+  --audio-track-h: calc(3.0 * var(--u));
+  --lyric-lane-h: calc(2.0 * var(--u));
+  --ruler-h: calc(1.5 * var(--u));
+  --handle-w: max(calc(0.6 * var(--u)), 12px);
+
+  /* Màu sắc chủ đạo (Giữ nguyên dark & cyan/teal) */
   --bg: #090d14;
   --panel: #111827;
   --panel2: #1e293b;
@@ -18,7 +40,6 @@
   --danger-hover: #dc2626;
   --playhead: #00f0ff;
   --stage: #05080e;
-  --tl-height: 250px;
   --font-ui: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
 }
@@ -27,80 +48,88 @@
 [hidden] { display: none !important; }
 
 html, body {
-  height: 100vh;
-  max-height: 100vh;
+  height: 100dvh;
+  min-height: 100dvh;
+  max-height: 100dvh;
   overflow: hidden !important;
   margin: 0;
   padding: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 13px/1.45 var(--font-ui);
+  font: var(--font-base)/1.45 var(--font-ui);
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* 1. TOÀN BỘ ỨNG DỤNG - VỪA KHÍT 100VH */
+/* 1. TOÀN BỘ ỨNG DỤNG - VỪA KHÍT 100DVH, KHÔNG CUỘN TRANG */
 .studio-app {
   width: 100vw;
-  height: 100vh;
-  max-height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   background: var(--bg);
+  position: relative;
 }
 
-/* 2. THANH TRÊN CÙNG (56px) */
+/* 2. THANH TRÊN CÙNG (CO GIÃN THEO --U) */
 .studio-header {
-  height: 56px;
-  min-height: 56px;
-  max-height: 56px;
+  height: var(--header-h);
+  min-height: var(--header-h);
+  max-height: var(--header-h);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 calc(1 * var(--u));
   background: var(--panel);
   border-bottom: 1px solid var(--line);
   z-index: 30;
-  gap: 12px;
+  gap: calc(0.6 * var(--u));
+  position: relative;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: calc(0.6 * var(--u));
+  flex-shrink: 0;
 }
 
 .brand-badge {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: calc(0.5 * var(--u));
   font-weight: 800;
-  font-size: 15px;
+  font-size: calc(1.05 * var(--u));
   color: var(--fg);
   letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 
 .brand-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: calc(2 * var(--u));
+  height: calc(2 * var(--u));
+  border-radius: var(--radius);
   background: linear-gradient(135deg, #14b8a6 0%, #00f0ff 100%);
   display: grid;
   place-items: center;
   color: #04171a;
   box-shadow: 0 0 12px rgba(20, 184, 166, 0.4);
+  font-size: calc(0.9 * var(--u));
 }
 
 .project-title-box {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: calc(0.35 * var(--u));
   background: var(--panel2);
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 4px 10px;
+  border-radius: var(--radius);
+  padding: calc(0.2 * var(--u)) calc(0.6 * var(--u));
   transition: border-color 0.15s;
+  height: var(--btn-h);
 }
 
 .project-title-box:hover, .project-title-box:focus-within {
@@ -111,40 +140,47 @@ html, body {
   background: transparent;
   border: none;
   color: var(--fg);
-  font-size: 12.5px;
+  font-size: var(--font-sm);
   font-weight: 600;
-  width: 170px;
+  width: clamp(100px, 12vw, 190px);
   outline: none;
   font-family: var(--font-ui);
 }
 
 .project-edit-icon {
   color: var(--muted);
-  font-size: 12px;
+  font-size: calc(0.8 * var(--u));
   pointer-events: none;
 }
 
 .header-center {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: calc(0.4 * var(--u));
+  flex-shrink: 1;
 }
 
 .header-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 10px;
+  gap: calc(0.4 * var(--u));
+  height: var(--btn-h);
+  padding: 0 calc(0.7 * var(--u));
   background: var(--panel2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   color: var(--fg);
-  font-size: 12px;
+  font-size: var(--font-sm);
   font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.15s ease;
+}
+
+.header-btn.icon-only {
+  width: var(--btn-h);
+  padding: 0;
 }
 
 .header-btn:hover:not(:disabled) {
@@ -161,31 +197,34 @@ html, body {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: calc(0.5 * var(--u));
+  flex-shrink: 0;
 }
 
 .segmented-control {
   display: inline-flex;
   background: var(--panel2);
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 3px;
-  gap: 3px;
+  border-radius: var(--radius);
+  padding: 2px;
+  gap: 2px;
+  height: var(--btn-h);
 }
 
 .segmented-control button {
   background: transparent;
   border: none;
-  padding: 5px 12px;
-  border-radius: 6px;
+  padding: 0 calc(0.6 * var(--u));
+  border-radius: calc(var(--radius) - 2px);
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-sm);
   font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   transition: all 0.15s ease;
+  height: 100%;
 }
 
 .segmented-control button:hover {
@@ -199,13 +238,13 @@ html, body {
 }
 
 .quality-select {
-  height: 34px;
+  height: var(--btn-h);
   background: var(--panel2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   color: var(--fg);
-  padding: 0 10px;
-  font-size: 12px;
+  padding: 0 calc(0.6 * var(--u));
+  font-size: var(--font-sm);
   font-weight: 600;
   cursor: pointer;
   outline: none;
@@ -219,17 +258,18 @@ html, body {
 .btn-export-teal {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 36px;
-  padding: 0 18px;
+  gap: calc(0.4 * var(--u));
+  height: var(--btn-h);
+  padding: 0 calc(1 * var(--u));
   background: linear-gradient(135deg, #14b8a6 0%, #00f0ff 100%);
   color: #04171a;
   border: none;
-  border-radius: 8px;
-  font-size: 13px;
+  border-radius: var(--radius);
+  font-size: var(--font-sm);
   font-weight: 700;
   cursor: pointer;
   box-shadow: 0 0 14px rgba(20, 184, 166, 0.4);
+  white-space: nowrap;
   transition: all 0.18s ease;
 }
 
@@ -242,7 +282,64 @@ html, body {
   transform: translateY(0);
 }
 
-/* 3. VÙNG GIỮA (MIDDLE WORKSPACE) */
+/* Menu thả xuống "⋯" trên header */
+.header-overflow-wrap {
+  position: relative;
+  display: none;
+}
+
+.header-overflow-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+  padding: calc(0.6 * var(--u));
+  z-index: 60;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: calc(0.4 * var(--u));
+}
+
+.overflow-group-title {
+  font-size: var(--font-xs);
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.overflow-row {
+  display: flex;
+  gap: 4px;
+}
+
+.overflow-item-btn {
+  flex: 1;
+  height: var(--btn-h);
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) - 2px);
+  color: var(--fg);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 calc(0.5 * var(--u));
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.overflow-item-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--panel3);
+}
+
+/* 3. VÙNG GIỮA (MIDDLE WORKSPACE - PHÂN BỔ THEO ĐỘ ƯU TIÊN) */
 .studio-middle {
   flex: 1;
   min-height: 0;
@@ -252,40 +349,46 @@ html, body {
   background: var(--bg);
 }
 
-/* DOCK ICON BÊN TRÁI (64px) */
+/* DOCK ICON BÊN TRÁI - LUÔN HIỂN THỊ ĐỦ 5 MỤC, TỰ GIẢM KHOẢNG CÁCH TRƯỚC */
 .nav-dock {
-  width: 64px;
-  min-width: 64px;
-  max-width: 64px;
+  width: var(--dock-w);
+  min-width: var(--dock-w);
+  max-width: var(--dock-w);
   flex-shrink: 0;
   height: 100%;
   background: var(--panel);
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
+  justify-content: space-evenly;
   align-items: center;
-  padding: 6px 0;
-  gap: 4px;
+  padding: calc(0.3 * var(--u)) 0;
+  gap: calc(0.2 * var(--u));
   z-index: 15;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .nav-dock-btn {
-  width: 54px;
-  height: 48px;
+  width: calc(var(--dock-w) - calc(0.6 * var(--u)));
+  height: clamp(38px, calc(3.4 * var(--u)), 56px);
   border: none;
   background: transparent;
-  border-radius: 8px;
+  border-radius: var(--radius);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   color: var(--muted);
   cursor: pointer;
   transition: all 0.15s ease;
   position: relative;
-  flex-shrink: 0;
+  flex-shrink: 1;
+}
+
+.nav-dock-btn svg {
+  width: clamp(16px, calc(1.3 * var(--u)), 22px);
+  height: clamp(16px, calc(1.3 * var(--u)), 22px);
 }
 
 .nav-dock-btn:hover {
@@ -303,23 +406,24 @@ html, body {
   content: "";
   position: absolute;
   left: 0;
-  top: 8px;
-  bottom: 8px;
+  top: 6px;
+  bottom: 6px;
   width: 3px;
   background: var(--accent);
   border-radius: 0 3px 3px 0;
 }
 
 .nav-dock-btn span {
-  font-size: 10px;
+  font-size: var(--font-xs);
   line-height: 1;
+  white-space: nowrap;
 }
 
-/* PANEL NỘI DUNG BÊN TRÁI (320px) */
+/* PANEL NỘI DUNG BÊN TRÁI (DRAWER) */
 .studio-drawer {
-  width: 320px;
-  min-width: 320px;
-  max-width: 320px;
+  width: var(--drawer-w);
+  min-width: 0;
+  max-width: 100%;
   flex-shrink: 0;
   height: 100%;
   background: var(--panel);
@@ -328,7 +432,8 @@ html, body {
   flex-direction: column;
   overflow: hidden;
   z-index: 10;
-  transition: width 0.15s ease;
+  transition: width 0.18s ease, transform 0.18s ease;
+  container-type: inline-size;
 }
 
 .studio-drawer.collapsed {
@@ -336,15 +441,15 @@ html, body {
 }
 
 .drawer-header {
-  height: 42px;
-  min-height: 42px;
-  padding: 0 14px;
+  height: calc(2.8 * var(--u));
+  min-height: calc(2.8 * var(--u));
+  padding: 0 calc(0.8 * var(--u));
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--line);
   background: var(--panel2);
-  font-size: 12.5px;
+  font-size: var(--font-sm);
   font-weight: 700;
 }
 
@@ -352,38 +457,41 @@ html, body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px;
+  padding: calc(0.8 * var(--u));
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: calc(0.7 * var(--u));
 }
 
 .drawer-scroll::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 .drawer-scroll::-webkit-scrollbar-thumb {
   background: var(--line);
   border-radius: 3px;
 }
 
-/* 4. KHUNG PREVIEW TRUNG TÂM & THANH ĐIỀU KHIỂN PHÁT */
+/* 4. KHUNG PREVIEW TRUNG TÂM (ƯU TIÊN SỐ 1 - 1FR) */
 .studio-center {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   background: var(--stage);
+  position: relative;
 }
 
 .stage-viewport {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: min(1.2rem, calc(0.55 * var(--u)));
   overflow: hidden;
   position: relative;
 }
@@ -394,120 +502,27 @@ html, body {
   justify-content: center;
   width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
 }
 
 canvas#cv {
   display: block;
   background: #000;
-  border-radius: 8px;
+  border-radius: var(--radius);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: width 0.1s ease, height 0.1s ease;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transition: width 0.08s ease, height 0.08s ease;
 }
 
-/* THANH ĐIỀU KHIỂN PHÁT XẾP NGANG (52px) */
-.studio-transport {
-  height: 52px;
-  min-height: 52px;
-  max-height: 52px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 16px;
-  background: var(--panel);
-  border-top: 1px solid var(--line);
-  gap: 14px;
-  z-index: 10;
-}
-
-.transport-btns-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.transport-round-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--panel2);
-  color: var(--fg);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.transport-round-btn:hover {
-  border-color: var(--accent);
-  background: var(--panel3);
-  color: var(--accent);
-}
-
-.transport-round-btn.play-btn {
-  width: 40px;
-  height: 40px;
-  background: var(--accent);
-  color: #04171a;
-  border: none;
-  box-shadow: 0 0 12px rgba(20, 184, 166, 0.4);
-}
-
-.transport-round-btn.play-btn:hover {
-  background: #00f0ff;
-  color: #04171a;
-  transform: scale(1.05);
-}
-
-.transport-round-btn.play-btn:active {
-  transform: scale(0.96);
-}
-
-.transport-timecode {
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--fg);
-  padding: 4px 10px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.transport-vol-box {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 2px 10px;
-  height: 34px;
-}
-
-.transport-vol-slider {
-  width: 70px;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
-.transport-vol-percent {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--muted);
-  width: 32px;
-  text-align: right;
-}
-
-/* 5. PANEL BÊN PHẢI THEO NGỮ CẢNH (290px) */
+/* 5. PANEL BÊN PHẢI THEO NGỮ CẢNH (CONTEXTUAL INSPECTOR) */
 .studio-right-panel {
-  width: 290px;
-  min-width: 290px;
-  max-width: 290px;
+  width: var(--drawer-w);
+  min-width: 0;
+  max-width: 100%;
   flex-shrink: 0;
   height: 100%;
   background: var(--panel);
@@ -516,7 +531,8 @@ canvas#cv {
   flex-direction: column;
   overflow: hidden;
   z-index: 10;
-  transition: width 0.15s ease;
+  transition: width 0.18s ease, transform 0.18s ease;
+  container-type: inline-size;
 }
 
 .studio-right-panel.collapsed {
@@ -524,22 +540,22 @@ canvas#cv {
 }
 
 .right-panel-header {
-  height: 42px;
-  min-height: 42px;
+  height: calc(2.8 * var(--u));
+  min-height: calc(2.8 * var(--u));
   flex-shrink: 0;
   border-bottom: 1px solid var(--line);
   background: var(--panel2);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
+  padding: 0 calc(0.8 * var(--u));
 }
 
 .right-header-title-box {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 12.5px;
+  gap: calc(0.4 * var(--u));
+  font-size: var(--font-sm);
   font-weight: 700;
   color: var(--fg);
   overflow: hidden;
@@ -548,36 +564,36 @@ canvas#cv {
 }
 
 .right-header-icon {
-  font-size: 14px;
+  font-size: calc(1 * var(--u));
 }
 
 .ctx-pane {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: calc(0.6 * var(--u));
 }
 
 .ctx-header-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-bottom: 8px;
+  gap: calc(0.5 * var(--u));
+  padding-bottom: calc(0.5 * var(--u));
   border-bottom: 1px solid var(--line);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .right-panel-content {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px;
+  padding: calc(0.8 * var(--u));
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: calc(0.7 * var(--u));
 }
 
 .right-panel-content::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 .right-panel-content::-webkit-scrollbar-thumb {
   background: var(--line);
@@ -585,32 +601,32 @@ canvas#cv {
 }
 
 .right-pane-title {
-  font-size: 13px;
+  font-size: var(--font-base);
   font-weight: 700;
   color: var(--fg);
-  margin: 0 0 4px 0;
+  margin: 0 0 2px 0;
 }
 
 .right-pane-desc {
-  font-size: 11.5px;
+  font-size: var(--font-xs);
   color: var(--muted);
-  margin: 0 0 10px 0;
+  margin: 0 0 calc(0.6 * var(--u)) 0;
   line-height: 1.4;
 }
 
 .chip-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: calc(0.4 * var(--u));
 }
 
 .chip-btn {
-  padding: 8px 10px;
+  padding: calc(0.45 * var(--u)) calc(0.6 * var(--u));
   background: var(--panel2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   color: var(--fg);
-  font-size: 11.5px;
+  font-size: var(--font-xs);
   font-weight: 500;
   cursor: pointer;
   text-align: left;
@@ -632,16 +648,16 @@ canvas#cv {
 .speed-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  gap: calc(0.4 * var(--u));
 }
 
 .speed-btn {
-  padding: 8px 6px;
+  padding: calc(0.4 * var(--u)) calc(0.3 * var(--u));
   background: var(--panel2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   color: var(--fg);
-  font-size: 12px;
+  font-size: var(--font-sm);
   font-family: var(--font-mono);
   font-weight: 600;
   cursor: pointer;
@@ -658,6 +674,41 @@ canvas#cv {
   color: var(--accent-fg);
   border-color: var(--accent);
   font-weight: 700;
+}
+
+/* CHẾ ĐỘ OVERLAY (PREVIEW SIZE GUARD): KHI PREVIEW BỊ BÉ DƯỚI 45% THÌ PANEL THÀNH OVERLAY */
+.studio-app.panel-as-overlay .studio-drawer {
+  position: absolute;
+  left: var(--dock-w);
+  top: 0;
+  bottom: 0;
+  z-index: 25;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.85);
+}
+
+.studio-app.panel-as-overlay .studio-right-panel {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 25;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.85);
+}
+
+/* CHẾ ĐỘ TẬP TRUNG / XEM LỚN (FOCUS MODE) */
+.studio-app.is-focus-mode .studio-drawer,
+.studio-app.is-focus-mode .studio-right-panel {
+  display: none !important;
+}
+
+.studio-app.is-focus-mode .studio-timeline {
+  height: calc(2.8 * var(--u)) !important;
+  min-height: calc(2.8 * var(--u)) !important;
+}
+
+.studio-app.is-focus-mode .timeline-body,
+.studio-app.is-focus-mode #tlResizeHandle {
+  display: none !important;
 }
 
 /* THANH KÉO CHIA PREVIEW & TIMELINE */
@@ -692,11 +743,11 @@ canvas#cv {
   width: 68px;
 }
 
-/* 6. TIMELINE Ở ĐÁY (MẶC ĐỊNH ~200px) */
+/* 6. TIMELINE Ở ĐÁY - CO GIÃN THEO KHÔNG GIAN THỰC TẾ */
 .studio-timeline {
-  height: var(--tl-height, 200px);
-  min-height: 150px;
-  max-height: 420px;
+  height: var(--tl-height, clamp(8rem, 28dvh, 40dvh));
+  min-height: 120px;
+  max-height: 50dvh;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -706,49 +757,76 @@ canvas#cv {
 }
 
 .timeline-toolbar {
-  height: 40px;
-  min-height: 40px;
-  padding: 0 12px;
+  height: calc(2.8 * var(--u));
+  min-height: calc(2.8 * var(--u));
+  padding: 0 calc(0.7 * var(--u));
   background: var(--panel2);
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  overflow-x: auto;
+  gap: calc(0.4 * var(--u));
   flex-shrink: 0;
+  position: relative;
 }
 
 .tl-tools-left {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: calc(0.3 * var(--u));
   flex-shrink: 0;
+}
+
+.tl-tools-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(0.4 * var(--u));
+  flex: 1;
+}
+
+.tl-tools-right {
+  display: flex;
+  align-items: center;
+  gap: calc(0.3 * var(--u));
+  flex-shrink: 0;
+}
+
+.transport-btns-cluster {
+  display: flex;
+  align-items: center;
+  gap: 3px;
 }
 
 .tl-divider {
   width: 1px;
-  height: 20px;
+  height: calc(1.4 * var(--u));
   background: var(--line);
-  margin: 0 4px;
+  margin: 0 2px;
   flex-shrink: 0;
 }
 
 .tl-tool-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 8px;
+  gap: 4px;
+  height: var(--btn-h);
+  padding: 0 calc(0.6 * var(--u));
   background: var(--panel3);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius);
   color: var(--fg);
-  font-size: 12px;
+  font-size: var(--font-xs);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.15s ease;
+}
+
+.tl-tool-btn.icon-only {
+  width: var(--btn-h);
+  padding: 0;
+  justify-content: center;
 }
 
 .tl-tool-btn:hover:not(:disabled) {
@@ -766,23 +844,113 @@ canvas#cv {
   cursor: not-allowed;
 }
 
-.tl-mini-select {
-  height: 28px;
-  background: var(--panel3);
+.transport-round-btn {
+  width: var(--btn-h);
+  height: var(--btn-h);
+  border-radius: var(--radius);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  background: var(--panel3);
   color: var(--fg);
-  padding: 0 6px;
-  font-size: 11px;
+  display: grid;
+  place-items: center;
   cursor: pointer;
-  outline: none;
+  transition: all 0.15s ease;
 }
 
-.tl-tools-right {
+.transport-round-btn.sm {
+  width: calc(1.9 * var(--u));
+  height: calc(1.9 * var(--u));
+}
+
+.transport-round-btn:hover {
+  border-color: var(--accent);
+  background: var(--panel2);
+  color: var(--accent);
+}
+
+.transport-round-btn.play-btn {
+  width: calc(2.4 * var(--u));
+  height: calc(2.4 * var(--u));
+  background: var(--accent);
+  color: #04171a;
+  border: none;
+  box-shadow: 0 0 10px rgba(20, 184, 166, 0.4);
+}
+
+.transport-round-btn.play-btn:hover {
+  background: #00f0ff;
+  color: #04171a;
+  transform: scale(1.05);
+}
+
+.transport-round-btn.play-btn:active {
+  transform: scale(0.96);
+}
+
+.transport-timecode {
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--fg);
+  padding: 2px calc(0.5 * var(--u));
+  background: var(--panel3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.transport-vol-box {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
+  gap: 3px;
+  background: var(--panel3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0 calc(0.4 * var(--u));
+  height: var(--btn-h);
+}
+
+.transport-vol-slider {
+  width: clamp(45px, 6vw, 75px);
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.transport-vol-percent {
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  color: var(--muted);
+  width: 28px;
+  text-align: right;
+}
+
+.tl-zoom-slider {
+  width: clamp(50px, 7vw, 90px);
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Menu thả xuống "⋯" trên timeline toolbar */
+.tl-overflow-wrap {
+  position: relative;
+  display: none;
+}
+
+.tl-overflow-dropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+  padding: calc(0.5 * var(--u));
+  z-index: 60;
+  min-width: 170px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .timeline-body {
@@ -793,11 +961,11 @@ canvas#cv {
   position: relative;
 }
 
-/* CỘT TIÊU ĐỀ BÊN TRÁI CỐ ĐỊNH (~90px) */
+/* CỘT TIÊU ĐỀ BÊN TRÁI CỐ ĐỊNH */
 .tl-fixed-column {
-  width: 90px;
-  min-width: 90px;
-  max-width: 90px;
+  width: clamp(70px, calc(6.5 * var(--u)), 110px);
+  min-width: clamp(70px, calc(6.5 * var(--u)), 110px);
+  max-width: clamp(70px, calc(6.5 * var(--u)), 110px);
   flex-shrink: 0;
   background: var(--panel);
   border-right: 1px solid var(--line);
@@ -806,7 +974,7 @@ canvas#cv {
 }
 
 .tl-col-ruler-space {
-  height: 24px;
+  height: var(--ruler-h);
   border-bottom: 1px solid var(--line);
   background: var(--panel2);
 }
@@ -818,30 +986,30 @@ canvas#cv {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11.5px;
+  font-size: var(--font-xs);
   font-weight: 700;
   letter-spacing: 0.04em;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .tl-col-lane.lane-clip {
-  top: 24px;
-  height: 72px;
+  top: var(--ruler-h);
+  height: var(--clip-track-h);
   color: #5eead4;
   background: rgba(15, 23, 42, 0.9);
 }
 
 .tl-col-lane.lane-audio {
-  top: 96px;
-  height: 48px;
+  top: calc(var(--ruler-h) + var(--clip-track-h));
+  height: var(--audio-track-h);
   color: #38bdf8;
   background: rgba(12, 25, 44, 0.9);
 }
 
 .tl-col-lane.lane-lyric {
-  top: 144px;
+  top: calc(var(--ruler-h) + var(--clip-track-h) + var(--audio-track-h));
   height: auto;
-  min-height: 30px;
+  min-height: var(--lyric-lane-h);
   color: #ffd23f;
   background: rgba(32, 24, 10, 0.9);
   flex-direction: column;
@@ -862,14 +1030,14 @@ canvas#cv {
 }
 
 .tl-col-lyr-lane-row {
-  height: 30px;
-  min-height: 30px;
-  max-height: 30px;
+  height: var(--lyric-lane-h);
+  min-height: var(--lyric-lane-h);
+  max-height: var(--lyric-lane-h);
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: var(--font-xs);
   font-weight: 700;
   color: #ffd23f;
   border-bottom: 1px dashed rgba(255, 210, 63, 0.25);
@@ -912,7 +1080,7 @@ canvas#cv {
   left: 0;
   right: 0;
   top: 0;
-  height: 24px;
+  height: var(--ruler-h);
   border-bottom: 1px solid var(--line);
   background: var(--panel2);
   z-index: 20;
@@ -920,9 +1088,9 @@ canvas#cv {
 
 .ruler span {
   position: absolute;
-  top: 4px;
+  top: 3px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--font-xs);
   color: var(--muted);
   transform: translateX(4px);
 }
@@ -935,13 +1103,13 @@ canvas#cv {
   background: var(--line);
 }
 
-/* 1. LÀN CLIP (72px) */
+/* 1. LÀN CLIP (CO GIÃN THEO --clip-track-h) */
 #clips {
   position: absolute;
   left: 0;
   right: 0;
-  top: 24px;
-  height: 72px;
+  top: var(--ruler-h);
+  height: var(--clip-track-h);
   pointer-events: auto;
   background: rgba(15, 23, 42, 0.45);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -950,8 +1118,8 @@ canvas#cv {
 .clip {
   position: absolute;
   top: 0;
-  height: 72px;
-  border-radius: 8px;
+  height: var(--clip-track-h);
+  border-radius: var(--radius);
   border: 1.5px solid rgba(20, 184, 166, 0.45) !important;
   background: #0f172a;
   box-sizing: border-box;
@@ -975,7 +1143,7 @@ canvas#cv {
 .clip-filmstrip {
   position: absolute;
   inset: 0;
-  border-radius: 6px;
+  border-radius: calc(var(--radius) - 2px);
   overflow: hidden;
   background-repeat: repeat-x;
   background-size: 110px 100%;
@@ -986,16 +1154,16 @@ canvas#cv {
 .clip-overlay {
   position: absolute;
   inset: 0;
-  border-radius: 6px;
+  border-radius: calc(var(--radius) - 2px);
   background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.05) 50%, rgba(0, 0, 0, 0.8) 100%);
   pointer-events: none;
 }
 
 .clip-header {
   position: absolute;
-  left: 12px;
-  right: 12px;
-  top: 4px;
+  left: 10px;
+  right: 10px;
+  top: 3px;
   z-index: 2;
   display: flex;
   align-items: center;
@@ -1005,7 +1173,7 @@ canvas#cv {
 
 .clip .cn {
   color: #fff;
-  font-size: 11px;
+  font-size: var(--font-xs);
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
@@ -1015,9 +1183,9 @@ canvas#cv {
 
 .clip-footer {
   position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 4px;
+  left: 10px;
+  right: 10px;
+  bottom: 3px;
   z-index: 2;
   display: flex;
   align-items: center;
@@ -1028,21 +1196,21 @@ canvas#cv {
 .clip .cd {
   color: #5eead4;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: calc(0.72 * var(--u));
   font-weight: 700;
   background: rgba(0, 0, 0, 0.75);
-  padding: 1px 5px;
+  padding: 1px 4px;
   border-radius: 4px;
   border: 1px solid rgba(20, 184, 166, 0.35);
 }
 
 .clip .kind {
   color: #ffd23f;
-  font-size: 9px;
+  font-size: calc(0.68 * var(--u));
   font-weight: 800;
   text-transform: uppercase;
   background: rgba(0, 0, 0, 0.75);
-  padding: 1px 5px;
+  padding: 1px 4px;
   border-radius: 4px;
 }
 
@@ -1050,7 +1218,7 @@ canvas#cv {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 12px;
+  width: var(--handle-w);
   cursor: ew-resize;
   z-index: 10;
   display: flex;
@@ -1069,16 +1237,16 @@ canvas#cv {
   box-shadow: 0 0 12px #fff;
 }
 
-.clip-handle.left { left: 0; border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
-.clip-handle.right { right: 0; border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
+.clip-handle.left { left: 0; border-top-left-radius: calc(var(--radius) - 2px); border-bottom-left-radius: calc(var(--radius) - 2px); }
+.clip-handle.right { right: 0; border-top-right-radius: calc(var(--radius) - 2px); border-bottom-right-radius: calc(var(--radius) - 2px); }
 
 /* Nút thêm clip cuối track */
 .tl-add-clip-tile {
   position: absolute;
   top: 0;
-  height: 72px;
-  width: 80px;
-  border-radius: 8px;
+  height: var(--clip-track-h);
+  width: clamp(65px, calc(6 * var(--u)), 85px);
+  border-radius: var(--radius);
   border: 1.5px dashed rgba(20, 184, 166, 0.5);
   background: rgba(20, 184, 166, 0.08);
   color: var(--accent);
@@ -1088,7 +1256,7 @@ canvas#cv {
   justify-content: center;
   gap: 2px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--font-xs);
   font-weight: 600;
   transition: all 0.15s ease;
   user-select: none;
@@ -1101,18 +1269,18 @@ canvas#cv {
 }
 
 .tl-add-clip-plus {
-  font-size: 18px;
+  font-size: calc(1.3 * var(--u));
   font-weight: 700;
   line-height: 1;
 }
 
-/* 2. LÀN NHẠC (48px) */
+/* 2. LÀN NHẠC (CO GIÃN THEO --audio-track-h) */
 .alane {
   position: absolute;
   left: 0;
   right: 0;
-  top: 96px;
-  height: 48px;
+  top: calc(var(--ruler-h) + var(--clip-track-h));
+  height: var(--audio-track-h);
   pointer-events: auto;
   background: rgba(12, 25, 44, 0.45);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -1122,17 +1290,17 @@ canvas#cv {
 
 .empty-audio-lane {
   width: 100%;
-  height: 40px;
+  height: calc(var(--audio-track-h) - 6px);
   margin: 0 4px;
   border: 1.5px dashed rgba(14, 165, 233, 0.45);
-  border-radius: 6px;
+  border-radius: calc(var(--radius) - 2px);
   background: rgba(14, 165, 233, 0.06);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   color: #38bdf8;
-  font-size: 12px;
+  font-size: var(--font-xs);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -1147,10 +1315,10 @@ canvas#cv {
 .audio-block {
   position: absolute;
   top: 2px;
-  height: 44px;
+  height: calc(var(--audio-track-h) - 4px);
   background: rgba(14, 165, 233, 0.18);
   border: 1.5px solid rgba(14, 165, 233, 0.55);
-  border-radius: 8px;
+  border-radius: var(--radius);
   cursor: grab;
   user-select: none;
   box-sizing: border-box;
@@ -1176,15 +1344,15 @@ canvas#cv {
   display: block;
   width: 100%;
   height: 100%;
-  border-radius: 6px;
+  border-radius: calc(var(--radius) - 2px);
   pointer-events: none;
 }
 
 .audio-block-title {
   position: absolute;
-  left: 12px;
-  top: 3px;
-  font-size: 11px;
+  left: 10px;
+  top: 2px;
+  font-size: var(--font-xs);
   font-weight: 700;
   color: #fff;
   pointer-events: none;
@@ -1197,23 +1365,44 @@ canvas#cv {
 
 .audio-block-time {
   position: absolute;
-  right: 12px;
-  bottom: 3px;
-  font-size: 10px;
+  right: 10px;
+  bottom: 2px;
+  font-size: calc(0.72 * var(--u));
   font-family: var(--font-mono);
   color: #5eead4;
   pointer-events: none;
   z-index: 2;
 }
 
-/* 3. LÀN LYRIC ĐA HÀNG (MỖI HÀNG 30px) */
+.audio-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--handle-w);
+  cursor: ew-resize;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #38bdf8;
+  color: #04171a;
+  font-size: 8px;
+  font-weight: 900;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+  user-select: none;
+}
+
+.audio-handle.left { left: 0; border-top-left-radius: calc(var(--radius) - 2px); border-bottom-left-radius: calc(var(--radius) - 2px); }
+.audio-handle.right { right: 0; border-top-right-radius: calc(var(--radius) - 2px); border-bottom-right-radius: calc(var(--radius) - 2px); }
+
+/* 3. LÀN LYRIC ĐA HÀNG (MỖI HÀNG var(--lyric-lane-h)) */
 .llane {
   position: absolute;
   left: 0;
   right: 0;
-  top: 144px;
+  top: calc(var(--ruler-h) + var(--clip-track-h) + var(--audio-track-h));
   height: auto;
-  min-height: 30px;
+  min-height: var(--lyric-lane-h);
   pointer-events: auto;
   background: rgba(32, 24, 10, 0.45);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -1223,7 +1412,7 @@ canvas#cv {
   position: absolute;
   left: 0;
   right: 0;
-  height: 30px;
+  height: var(--lyric-lane-h);
   border-bottom: 1px dashed rgba(255, 210, 63, 0.2);
   box-sizing: border-box;
   pointer-events: none;
@@ -1231,18 +1420,18 @@ canvas#cv {
 
 .lyr-block {
   position: absolute;
-  height: 26px;
+  height: calc(var(--lyric-lane-h) - 4px);
   background: rgba(255, 210, 63, 0.18);
   border: 1.5px solid rgba(255, 210, 63, 0.6);
-  border-radius: 6px;
+  border-radius: calc(var(--radius) - 2px);
   cursor: grab;
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  padding: 0 6px;
   user-select: none;
   box-sizing: border-box;
   overflow: hidden;
-  font-size: 11.5px;
+  font-size: var(--font-xs);
   z-index: 4;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
@@ -1697,28 +1886,195 @@ canvas#cv {
   border-color: var(--accent);
 }
 
-.lyr-tap-stage {
+/* BỘ CHUYỂN CHẾ ĐỘ CĂN GIỜ (GIỮ vs BẤM) */
+.lyr-mode-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  background: var(--panel2);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+.lyr-mode-btn {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.lyr-mode-btn:hover {
+  color: var(--fg);
+}
+
+.lyr-mode-btn.active {
+  background: var(--panel);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 10px rgba(20, 184, 166, 0.25);
+}
+
+.lyr-subtools-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--panel2);
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+.speed-chip-btn {
+  padding: 3px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.speed-chip-btn:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+.speed-chip-btn.active {
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.lyr-mini-waveform-box {
   background: var(--panel2);
   border: 1px solid var(--line);
   border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.lyr-tap-stage {
+  background: linear-gradient(180deg, var(--panel2) 0%, rgba(15, 23, 42, 0.9) 100%);
+  border: 1px solid var(--line);
+  border-radius: 10px;
   padding: 14px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   text-align: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+
+.lyr-tap-prev {
+  font-size: 11px;
+  color: var(--muted);
+  min-height: 16px;
+  opacity: 0.65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .lyr-tap-current {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--accent);
-  min-height: 48px;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.35;
+  color: #fff;
+  min-height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 10px;
-  background: var(--accent-subtle);
-  border: 1px dashed var(--accent);
+  padding: 10px 14px;
+  background: rgba(20, 184, 166, 0.12);
+  border: 2px solid rgba(20, 184, 166, 0.4);
+  border-radius: 10px;
+  text-shadow: 0 0 12px rgba(20, 184, 166, 0.4);
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.lyr-tap-current.holding {
+  background: rgba(20, 184, 166, 0.35);
+  border-color: #00f0ff;
+  box-shadow: 0 0 24px rgba(0, 240, 255, 0.65);
+  transform: scale(1.02);
+}
+
+.lyr-tap-next {
+  font-size: 11.5px;
+  color: var(--muted);
+  min-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lyr-big-tap-btn {
+  padding: 14px 16px !important;
+  font-size: 14.5px !important;
+  font-weight: 800 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 10px !important;
+  user-select: none;
+  touch-action: none;
+  box-shadow: 0 0 16px rgba(20, 184, 166, 0.45);
+  transition: all 0.12s ease;
+}
+
+.lyr-big-tap-btn:hover {
+  box-shadow: 0 0 24px rgba(0, 240, 255, 0.7);
+  transform: translateY(-1px);
+}
+
+.lyr-big-tap-btn.is-holding {
+  background: linear-gradient(135deg, #ff007f 0%, #f59e0b 100%) !important;
+  color: #fff !important;
+  box-shadow: 0 0 28px rgba(255, 0, 127, 0.8) !important;
+  transform: scale(0.98);
+}
+
+.lyr-pause-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--panel2);
   border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+.unsynced-chip {
+  padding: 2px 7px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #f59e0b;
+  border-radius: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.unsynced-chip:hover {
+  background: rgba(245, 158, 11, 0.3);
+  border-color: #f59e0b;
+  color: #fff;
 }
 
 .lyr-cards-list {
@@ -2075,4 +2431,216 @@ canvas#cv {
 
 .fs-exit-btn:active {
   transform: translateY(0);
+}
+
+/* ==========================================================================
+   7. CONTAINER QUERIES (SELF-SCALING COMPONENTS)
+   Mỗi panel, thẻ clip, thẻ lyric tự điều chỉnh dựa trên độ rộng thực tế
+   ========================================================================== */
+@container (max-width: 260px) {
+  .row2, .row3 {
+    grid-template-columns: 1fr !important;
+  }
+  .chip-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .speed-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .drawer-header, .right-panel-header {
+    padding: 0 8px;
+  }
+  .btns {
+    flex-direction: column !important;
+  }
+}
+
+@container (max-width: 180px) {
+  .drawer-scroll, .right-panel-content {
+    padding: 6px !important;
+  }
+  .field label {
+    font-size: 11px !important;
+  }
+}
+
+/* ==========================================================================
+   8. ADAPTIVE TOOLBARS (TỰ CO GIÃN DỰA TRÊN ĐO ĐẠC THỰC TẾ)
+   ========================================================================== */
+/* Cấp độ 1: Thu gọn nhãn chữ, chỉ hiện icon + tooltip */
+.toolbar-compact .btn-text {
+  display: none !important;
+}
+
+.toolbar-compact .header-btn {
+  padding: 0 calc(0.5 * var(--u));
+}
+
+.toolbar-compact .tl-tool-btn {
+  padding: 0 calc(0.4 * var(--u));
+}
+
+/* Cấp độ 2: Rất hẹp -> gom các mục thứ yếu vào menu "⋯" */
+.toolbar-ultra-compact .hdr-item-orient,
+.toolbar-ultra-compact .hdr-item-quality {
+  display: none !important;
+}
+
+.toolbar-ultra-compact .header-overflow-wrap {
+  display: block !important;
+}
+
+.toolbar-ultra-compact .opt-action {
+  display: none !important;
+}
+
+.toolbar-ultra-compact .tl-overflow-wrap {
+  display: block !important;
+}
+
+.toolbar-ultra-compact .transport-timecode {
+  font-size: calc(0.68 * var(--u));
+  padding: 1px 4px;
+}
+
+.toolbar-ultra-compact .transport-vol-box {
+  display: none !important;
+}
+
+/* ==========================================================================
+   9. BỐ CỤC THEO BẢN CHẤT TƯƠNG TÁC (INTERACTION-TYPE BASED)
+   ========================================================================== */
+/* Màn hình cảm ứng: Tăng vùng chạm tối thiểu 44px, tay nắm to & luôn hiện */
+@media (pointer: coarse), (hover: none) {
+  :root {
+    --handle-w: 24px;
+  }
+
+  .nav-dock-btn {
+    min-height: 44px;
+  }
+
+  .header-btn, .tl-tool-btn, .btn, .chip-btn, .speed-btn {
+    min-height: 40px;
+    touch-action: manipulation;
+  }
+
+  .transport-round-btn {
+    min-width: 38px;
+    min-height: 38px;
+  }
+
+  .transport-round-btn.play-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .tl-resize-handle {
+    height: 14px;
+  }
+
+  .tl-resize-bar {
+    height: 4px;
+    width: 60px;
+  }
+
+  /* Tay nắm clip & audio & lyric luôn hiện rõ trên cảm ứng khi chọn */
+  .clip.sel .clip-handle,
+  .audio-block.sel .audio-handle,
+  .lyr-block.sel .lyr-handle {
+    width: 22px !important;
+    opacity: 1 !important;
+    font-size: 10px !important;
+  }
+
+  .lyr-handle {
+    width: 18px !important;
+    opacity: 0.8 !important;
+  }
+
+  /* Con trượt âm lượng & zoom dễ chạm hơn */
+  input[type="range"] {
+    min-height: 32px;
+  }
+}
+
+/* Màn hình dọc (Điện thoại / Tablet dọc): Đảo bố cục dọc mượt mà */
+@media (orientation: portrait) {
+  .studio-middle {
+    flex-direction: column !important;
+  }
+
+  .nav-dock {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    height: calc(3.2 * var(--u)) !important;
+    flex-direction: row !important;
+    justify-content: space-around !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--line);
+    order: 2;
+  }
+
+  .nav-dock-btn {
+    width: auto !important;
+    height: 100% !important;
+    padding: 0 10px !important;
+  }
+
+  .nav-dock-btn.active::before,
+  .nav-dock-btn[aria-selected="true"]::before {
+    left: 8px !important;
+    right: 8px !important;
+    top: auto !important;
+    bottom: 0 !important;
+    width: auto !important;
+    height: 3px !important;
+    border-radius: 3px 3px 0 0 !important;
+  }
+
+  .studio-center {
+    order: 1;
+    flex: 1 !important;
+  }
+
+  /* Panels biến thành Bottom Sheet trượt từ đáy */
+  .studio-drawer,
+  .studio-right-panel {
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 60dvh !important;
+    z-index: 55 !important;
+    border-radius: calc(1 * var(--u)) calc(1 * var(--u)) 0 0 !important;
+    border-left: 1px solid var(--line-strong) !important;
+    border-right: 1px solid var(--line-strong) !important;
+    border-top: 1px solid var(--accent) !important;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.9) !important;
+    animation: slideUpSheet 0.22s ease-out;
+  }
+
+  @keyframes slideUpSheet {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  .studio-timeline {
+    order: 3;
+    height: clamp(7rem, 24dvh, 32dvh) !important;
+  }
+
+  /* Safe Area Inset */
+  .studio-header {
+    padding-top: max(0px, env(safe-area-inset-top));
+    height: calc(var(--header-h) + env(safe-area-inset-top));
+  }
+
+  .timeline-toolbar {
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
 }
