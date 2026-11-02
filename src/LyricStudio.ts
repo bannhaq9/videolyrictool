@@ -3,6 +3,7 @@
  * Preserves 100% of original canvas drawing, timing, audio sync, and MediaRecorder export logic.
  */
 import { renderTrimmedAudio, audioBufferToWav, audioBufferToMp3, downloadBlob } from './audioExporter';
+import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 
 declare global {
   interface Window {
@@ -145,6 +146,8 @@ export function initStudio() {
     color: string;
     thumb: string;
     sample: boolean;
+    _lastValidCanvas?: HTMLCanvasElement | null;
+    exportEl?: HTMLVideoElement | null;
   }
 
   interface LyricItem {
@@ -268,7 +271,8 @@ export function initStudio() {
   (A.el as any).mozPreservesPitch = true;
 
   let uid = 0, mediaUid = 0, lyrUid = 0, audioUid = 0, raf = 0, t0 = 0, tbase = 0, endCb: (() => Promise<void> | void) | null = null,
-      exporting = false, expCancel = false, expBlob: Blob | null = null, expName = '', expRec: MediaRecorder | null = null;
+      exporting = false, expCancel = false, expBlob: Blob | null = null, expName = '', expRec: MediaRecorder | null = null,
+      isExportMode = false, fallbackFrameCount = 0;
   const cv: HTMLCanvasElement = $('#cv'), ctx = cv.getContext('2d')!;
   const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
   const ease = (k: number) => k * k * (3 - 2 * k);
@@ -289,8 +293,12 @@ export function initStudio() {
     if (!e) return;
     e.textContent = m;
     e.hidden = false;
+    e.onclick = () => {
+      e.hidden = true;
+      clearTimeout(toastTimer);
+    };
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { e.hidden = true; }, 3200);
+    toastTimer = setTimeout(() => { e.hidden = true; }, 3000);
   }
 
   /* ---------- kích thước khung & đơn vị cơ sở co giãn ---------- */
@@ -310,7 +318,9 @@ export function initStudio() {
 
   function dims() {
     const sh = S.res, lg = Math.round(S.res * 16 / 9 / 2) * 2;
-    return S.orient === 'v' ? { W: sh, H: lg } : { W: lg, H: sh };
+    const w = S.orient === 'v' ? sh : lg;
+    const h = S.orient === 'v' ? lg : sh;
+    return { W: w - (w % 2), H: h - (h % 2) };
   }
 
   function setSize() {
@@ -706,9 +716,20 @@ export function initStudio() {
   }
 
   function drawMedia(c: Clip, local: number, o: { zoom?: number; alpha?: number; dx?: number }, targetCtx: CanvasRenderingContext2D = ctx) {
-    const W = cv.width, H = cv.height, el = c.el;
+    const W = cv.width, H = cv.height;
+    const el = (isExportMode && c.exportEl) ? c.exportEl : c.el;
     if (!el) return;
-    if (c.type === 'video' && el.readyState < 2) return;
+    if (c.type === 'video' && el.readyState < 2) {
+      if (isExportMode) fallbackFrameCount++;
+      if (c._lastValidCanvas) {
+        targetCtx.save();
+        targetCtx.globalAlpha = o.alpha == null ? 1 : o.alpha;
+        targetCtx.drawImage(c._lastValidCanvas, 0, 0, W, H);
+        targetCtx.restore();
+        return;
+      }
+      return;
+    }
     const { w, h } = srcSize(el);
     const p = c.dur > 0 ? local / c.dur : 0;
     let z = 1, px = 0;
@@ -739,6 +760,31 @@ export function initStudio() {
       } else {
         const s = Math.max(W / w, H / h);
         targetCtx.drawImage(el, (W - w * s) / 2, (H - h * s) / 2, w * s, h * s);
+      }
+
+      // Lưu lại khung hình hợp lệ gần nhất cho clip video để dự phòng không bao giờ bị đen
+      if (c.type === 'video' && el.readyState >= 2) {
+        if (!c._lastValidCanvas) {
+          c._lastValidCanvas = document.createElement('canvas');
+          c._lastValidCanvas.width = W;
+          c._lastValidCanvas.height = H;
+        } else if (c._lastValidCanvas.width !== W || c._lastValidCanvas.height !== H) {
+          c._lastValidCanvas.width = W;
+          c._lastValidCanvas.height = H;
+        }
+        const lctx = c._lastValidCanvas.getContext('2d');
+        if (lctx) {
+          lctx.clearRect(0, 0, W, H);
+          try {
+            if (c.fit === 'contain') {
+              const s = Math.min(W / w, H / h);
+              lctx.drawImage(el, (W - w * s) / 2, (H - h * s) / 2, w * s, h * s);
+            } else {
+              const s = Math.max(W / w, H / h);
+              lctx.drawImage(el, (W - w * s) / 2, (H - h * s) / 2, w * s, h * s);
+            }
+          } catch (err) {}
+        }
       }
     } catch (e) {}
     targetCtx.restore();
@@ -1152,11 +1198,16 @@ export function initStudio() {
     previewTrRaf = requestAnimationFrame(frame);
   }
 
-  function renderFrame(t: number) {
+  function renderFrame(t: number, targetCtx: CanvasRenderingContext2D = ctx) {
     if (isPreviewingTr) return;
     const W = cv.width, H = cv.height;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
+
+    targetCtx.save();
+    targetCtx.globalAlpha = 1;
+    targetCtx.globalCompositeOperation = 'source-over';
+    targetCtx.fillStyle = '#000';
+    targetCtx.fillRect(0, 0, W, H);
+
     const L = locate(t);
     if (L) {
       const c = S.clips[L.i], prev = S.clips[L.i - 1];
@@ -1165,18 +1216,40 @@ export function initStudio() {
       if (prev && c.tr !== 'none' && L.local < trd && trd > 0) {
         renderTransition(c.tr, prev, c, L.local, trd, L.i);
       } else {
-        drawMedia(c, L.local, {}, ctx);
+        drawMedia(c, L.local, {}, targetCtx);
       }
     } else {
-      ctx.fillStyle = '#9fb3b8';
-      ctx.font = '500 ' + Math.round(W * 0.045) + 'px "Be Vietnam Pro",sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('Thêm ảnh hoặc video để bắt đầu', W / 2, H / 2);
+      targetCtx.fillStyle = '#9fb3b8';
+      targetCtx.font = '500 ' + Math.round(W * 0.045) + 'px "Be Vietnam Pro",sans-serif';
+      targetCtx.textAlign = 'center';
+      targetCtx.textBaseline = 'middle';
+      targetCtx.fillText('Thêm ảnh hoặc video để bắt đầu', W / 2, H / 2);
     }
     drawVisualizer(t);
     drawTitle(t);
     drawLyrics(t);
+
+    // Mờ dần đầu video (Fade In)
+    if (A.fadeIn > 0 && t < A.fadeIn) {
+      const fInAlpha = 1 - clamp(t / A.fadeIn, 0, 1);
+      if (fInAlpha > 0.001) {
+        targetCtx.fillStyle = 'rgba(0,0,0,' + fInAlpha.toFixed(3) + ')';
+        targetCtx.fillRect(0, 0, W, H);
+      }
+    }
+
+    // Mờ dần cuối video (Fade Out)
+    const totalT = total();
+    if (A.fadeOut > 0 && t > totalT - A.fadeOut) {
+      const rem = Math.max(0, totalT - t);
+      const fOutAlpha = 1 - clamp(rem / A.fadeOut, 0, 1);
+      if (fOutAlpha > 0.001) {
+        targetCtx.fillStyle = 'rgba(0,0,0,' + fOutAlpha.toFixed(3) + ')';
+        targetCtx.fillRect(0, 0, W, H);
+      }
+    }
+
+    targetCtx.restore();
   }
   const draw = () => renderFrame(S.t);
 
@@ -2406,6 +2479,8 @@ export function initStudio() {
   let lastRecordedInfo: { id: number; text: string; t: number; endT: number } | null = null;
   let replayTimeout: any = null;
   let lastActiveCardId: number | null = null;
+  let justDroppedLyrId: number | null = null;
+  let justDroppedTimer: any = null;
 
   function getLyricLaneCount(): number {
     const maxLane = S.lyr.reduce((max, l) => Math.max(max, typeof l.lane === 'number' ? l.lane : 0), 0);
@@ -3454,7 +3529,6 @@ export function initStudio() {
 
     selectLyrBlock(nextId);
     syncLyrToEditor(false);
-    toast(`Đã tách câu #${idx + 1} thành 2 câu.`);
   }
 
   function mergeLyricRow(idx: number) {
@@ -3467,7 +3541,6 @@ export function initStudio() {
     S.lyr.splice(idx + 1, 1);
     selectLyrBlock(cur.id);
     syncLyrToEditor(false);
-    toast(`Đã gộp với câu kế tiếp.`);
   }
 
   function deleteLyricRow(idx: number) {
@@ -3475,7 +3548,6 @@ export function initStudio() {
     S.lyr.splice(idx, 1);
     S.selLyrId = S.lyr[Math.min(idx, S.lyr.length - 1)]?.id || null;
     syncLyrToEditor(false);
-    toast('Đã xóa câu.');
   }
 
   function addLyricAtPlayhead() {
@@ -3488,7 +3560,6 @@ export function initStudio() {
     S.lyr.sort((a, b) => a.t - b.t);
     selectLyrBlock(newId);
     syncLyrToEditor(false);
-    toast(`Đã thêm câu mới (2.0s) tại ${fmt(t)} (Hàng ${lane + 1})`);
   }
 
   function splitLyricAtPlayhead() {
@@ -3519,7 +3590,6 @@ export function initStudio() {
     S.lyr.sort((a, b) => a.t - b.t);
     selectLyrBlock(nextId);
     syncLyrToEditor(false);
-    toast('Đã tách thành 2 câu tại ' + fmt(S.t));
   }
 
   function mergeLyricWithNext() {
@@ -5126,13 +5196,14 @@ export function initStudio() {
 
       S.lyr.forEach((ly, i) => {
         const isSel = ly.id === S.selLyrId;
+        const isJustDropped = ly.id === justDroppedLyrId;
         const endT = (ly.endT && ly.endT > ly.t) ? ly.endT : (ly.t + 3.0);
         const dur = Math.max(0.2, endT - ly.t);
         const w = Math.max(24, dur * pps - 2);
         const lane = typeof ly.lane === 'number' ? clamp(ly.lane, 0, 3) : 0;
         const topPx = lane * lyrLaneH + 2;
 
-        l += '<div class="lyr-block' + (isSel ? ' sel' : '') + '" data-lid="' + ly.id + '" style="left:' + (ly.t * pps) + 'px;top:' + topPx + 'px;width:' + w + 'px" title="' + esc(ly.text) + ' [' + fmt(ly.t) + ' ➔ ' + fmt(endT) + ' - Hàng ' + (lane + 1) + ']">'
+        l += '<div class="lyr-block' + (isSel ? ' sel' : '') + (isJustDropped ? ' lyr-just-dropped' : '') + '" data-lid="' + ly.id + '" style="left:' + (ly.t * pps) + 'px;top:' + topPx + 'px;width:' + w + 'px" title="' + esc(ly.text) + ' [' + fmt(ly.t) + ' ➔ ' + fmt(endT) + ' - Hàng ' + (lane + 1) + ']">'
           + '<span class="lyr-handle left" data-lid="' + ly.id + '" data-handle="left" title="Kéo mép trái để đổi giờ bắt đầu"></span>'
           + '<span class="lyr-idx">#' + (i + 1) + '</span>'
           + '<span class="lyr-txt">' + esc(ly.text || '(trống)') + '</span>'
@@ -5492,7 +5563,6 @@ export function initStudio() {
       S.activeTrack = 'audio';
 
       refreshAll();
-      toast(`Đã tách đoạn nhạc thành 2 khối tại ${fmt(S.t)}.`);
       return;
     }
 
@@ -5645,7 +5715,6 @@ export function initStudio() {
     S.activeTrack = 'clip';
 
     refreshAll();
-    toast(`Đã tách clip "${c.name}" thành 2 clip tại ${fmt(S.t)}.`);
   }
 
   const splitClipAtPlayhead = splitAtPlayhead;
@@ -5665,7 +5734,6 @@ export function initStudio() {
         S.audioBlocks.splice(idx, 1);
         S.selAudioId = S.audioBlocks[Math.min(idx, S.audioBlocks.length - 1)]?.id ?? null;
         refreshAll();
-        toast('Đã xóa đoạn nhạc.');
         return;
       }
     }
@@ -5695,7 +5763,6 @@ export function initStudio() {
         }
         S.sel = S.clips[Math.min(i, S.clips.length - 1)]?.id ?? null;
         refreshAll();
-        toast('Đã xóa clip: ' + removed.name);
         return;
       }
     }
@@ -5767,7 +5834,7 @@ export function initStudio() {
     } catch (e) {}
   }
 
-  /* ---------- xuất video ---------- */
+  /* ---------- xuất video chuẩn khung hình - chống đen - không phụ thuộc tab ---------- */
   function pickMime() {
     const c = [
       'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
@@ -5778,74 +5845,629 @@ export function initStudio() {
     ];
     return c.find(m => typeof window.MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) || '';
   }
-  async function exportVideo() {
-    if (!total()) return toast('Chưa có clip nào để xuất.');
-    if (typeof MediaRecorder === 'undefined' || !(cv as any).captureStream) {
-      return toast('Trình duyệt này chưa hỗ trợ xuất video. Hãy dùng Chrome hoặc Edge bản mới trên máy tính.');
+
+  function seekVideoToTime(v: HTMLVideoElement, targetTime: number, fps = 30, maxWaitMs = 3000): Promise<boolean> {
+    const clampedT = clamp(targetTime, 0, v.duration || 9999);
+    // Tối ưu khung liên tiếp: nếu độ lệch < 0.95 / fps và video đã sẵn sàng (readyState >= 2), không cần seek lại
+    if (Math.abs(v.currentTime - clampedT) < (0.95 / fps) && v.readyState >= 2 && !v.seeking) {
+      return Promise.resolve(true);
     }
-    const mime = pickMime();
-    if (!mime) return toast('Trình duyệt không có bộ ghi video phù hợp.');
+    return new Promise<boolean>((resolve) => {
+      let done = false;
+      const tid = setTimeout(() => {
+        if (!done) {
+          done = true;
+          cleanup();
+          console.warn(`[Export] Video seek timeout tại ${clampedT.toFixed(2)}s (readyState: ${v.readyState})`);
+          resolve(v.readyState >= 2);
+        }
+      }, maxWaitMs);
+
+      const onSeeked = () => {
+        if (!done) {
+          done = true;
+          cleanup();
+          if ('requestVideoFrameCallback' in v) {
+            try {
+              (v as any).requestVideoFrameCallback(() => resolve(v.readyState >= 2));
+              return;
+            } catch (e) {}
+          }
+          setTimeout(() => resolve(v.readyState >= 2), 16);
+        }
+      };
+
+      const cleanup = () => {
+        clearTimeout(tid);
+        v.removeEventListener('seeked', onSeeked);
+        v.removeEventListener('error', onSeeked);
+      };
+
+      v.addEventListener('seeked', onSeeked, { once: true });
+      v.addEventListener('error', onSeeked, { once: true });
+      try {
+        v.currentTime = clampedT;
+      } catch (e) {
+        cleanup();
+        resolve(false);
+      }
+    });
+  }
+
+  async function setupIsolatedExportVideos() {
+    for (const c of S.clips) {
+      if (c.type === 'video') {
+        const v = document.createElement('video');
+        v.muted = true;
+        v.playsInline = true;
+        v.preload = 'auto';
+        v.crossOrigin = 'anonymous';
+        v.src = c.url;
+        await new Promise<void>((resolve) => {
+          if (v.readyState >= 1) return resolve();
+          let resolved = false;
+          const tid = setTimeout(() => {
+            if (!resolved) {
+              resolved = true;
+              resolve();
+            }
+          }, 2500);
+          v.addEventListener('loadedmetadata', () => {
+            if (!resolved) {
+              resolved = true;
+              clearTimeout(tid);
+              resolve();
+            }
+          }, { once: true });
+          v.addEventListener('error', () => {
+            if (!resolved) {
+              resolved = true;
+              clearTimeout(tid);
+              resolve();
+            }
+          }, { once: true });
+        });
+        c.exportEl = v;
+        c._lastValidCanvas = null;
+      }
+    }
+  }
+
+  function cleanupExportVideos() {
+    for (const c of S.clips) {
+      if (c.exportEl) {
+        try {
+          c.exportEl.pause();
+          c.exportEl.removeAttribute('src');
+          c.exportEl.load();
+        } catch (e) {}
+        c.exportEl = null;
+      }
+      c._lastValidCanvas = null;
+    }
+    isExportMode = false;
+  }
+
+  async function prepareClipsForFrame(t: number, fps = 30) {
+    const L = locate(t);
+    if (!L) return;
+    const c = S.clips[L.i];
+    const prev = S.clips[L.i - 1];
+    const maxTrd = prev ? Math.max(0.1, Math.min(3.0, prev.dur * 0.5, c.dur * 0.5)) : 0;
+    const trd = prev ? Math.min(c.trDur, maxTrd) : 0;
+    const inTr = prev && c.tr !== 'none' && L.local < trd && trd > 0;
+
+    const seeks: Promise<boolean>[] = [];
+
+    const targetEl = (isExportMode && c.exportEl) ? c.exportEl : c.el;
+    if (c.type === 'video' && targetEl) {
+      const targetSec = c.srcIn + clamp(L.local, 0, c.dur);
+      seeks.push(seekVideoToTime(targetEl, targetSec, fps));
+    }
+
+    if (inTr && prev && prev.type === 'video') {
+      const prevTargetEl = (isExportMode && prev.exportEl) ? prev.exportEl : prev.el;
+      if (prevTargetEl) {
+        const prevTargetSec = clamp(prev.srcIn + prev.dur + L.local, prev.srcIn, prev.srcOut || prev.full);
+        seeks.push(seekVideoToTime(prevTargetEl, prevTargetSec, fps));
+      }
+    }
+
+    if (seeks.length > 0) {
+      await Promise.all(seeks);
+    }
+  }
+
+  async function renderFullTimelineAudioBuffer(totalDur: number): Promise<AudioBuffer | null> {
+    if (!A.loaded && !A.file && !A.url && !A.el.src) return null;
+    const rawBuf = await getDecodedAudioBuffer();
+    if (!rawBuf) return null;
+
+    const blocks = S.audioBlocks.length > 0 ? S.audioBlocks : [{
+      id: 1,
+      start: 0,
+      srcIn: 0,
+      srcOut: A.dur || 1,
+      dur: A.dur || 1
+    }];
+
+    const sampleRate = rawBuf.sampleRate || 44100;
+    const numChannels = Math.min(2, rawBuf.numberOfChannels || 2);
+    const totalFrames = Math.max(1, Math.ceil(totalDur * sampleRate));
+    const offlineCtx = new OfflineAudioContext(numChannels, totalFrames, sampleRate);
+
+    const offGain = offlineCtx.createGain();
+    offGain.gain.value = A.vol;
+
+    const offComp = offlineCtx.createDynamicsCompressor();
+    offComp.threshold.value = -24;
+    offComp.knee.value = 30;
+    offComp.ratio.value = 12;
+    offComp.attack.value = 0.003;
+    offComp.release.value = 0.25;
+
+    offGain.connect(offComp);
+    offComp.connect(offlineCtx.destination);
+
+    blocks.forEach(b => {
+      if (b.start >= totalDur) return;
+      const validDur = Math.min(b.dur, totalDur - b.start);
+      if (validDur <= 0) return;
+      try {
+        const src = offlineCtx.createBufferSource();
+        src.buffer = rawBuf;
+        src.connect(offGain);
+        src.start(b.start, b.srcIn, validDur);
+      } catch (e) {
+        console.warn('offline audio block error:', e);
+      }
+    });
+
+    const rendered = await offlineCtx.startRendering();
+
+    // Fade In / Fade Out âm thanh
+    if (A.fadeIn > 0 || A.fadeOut > 0) {
+      for (let ch = 0; ch < rendered.numberOfChannels; ch++) {
+        const data = rendered.getChannelData(ch);
+        if (A.fadeIn > 0) {
+          const fadeInFrames = Math.floor(Math.min(A.fadeIn, totalDur) * sampleRate);
+          for (let i = 0; i < fadeInFrames; i++) {
+            data[i] *= (i / fadeInFrames);
+          }
+        }
+        if (A.fadeOut > 0) {
+          const fadeOutFrames = Math.floor(Math.min(A.fadeOut, totalDur) * sampleRate);
+          const startFadeOut = totalFrames - fadeOutFrames;
+          for (let i = startFadeOut; i < totalFrames; i++) {
+            data[i] *= Math.max(0, (totalFrames - i) / fadeOutFrames);
+          }
+        }
+      }
+    }
+    return rendered;
+  }
+
+  async function exportVideo() {
+    const totalT = total();
+    if (!totalT) return toast('Chưa có clip nào để xuất.');
+
     pause();
     await loadFonts();
-    const stream: MediaStream = (cv as any).captureStream(30);
-    if (A.loaded && ensureGraph()) {
-      try { await A.ctx!.resume(); } catch (e) {}
-      A.dest!.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+
+    // 1. TẢI VÀ GIẢI MÃ SẴN MỌI HÌNH ẢNH TRƯỚC KHI BẮT ĐẦU
+    for (const c of S.clips) {
+      if (c.type === 'image' && c.el) {
+        try {
+          if ('decode' in c.el) await c.el.decode();
+        } catch (e) {}
+      }
     }
-    const chunks: Blob[] = [];
-    let rec: MediaRecorder;
+
+    // 2. CÔ LẬP THẺ VIDEO XUẤT ĐỘC LẬP VỚI PREVIEW
+    isExportMode = true;
+    fallbackFrameCount = 0;
+    await setupIsolatedExportVideos();
+
+    // 3. TRỘN ÂM THANH NGOẠI TUYẾN CHÍNH XÁC (OfflineAudioContext)
+    let fullAudioBuf: AudioBuffer | null = null;
     try {
-      rec = new MediaRecorder(stream, {
-        mimeType: mime,
-        videoBitsPerSecond: S.res >= 1080 ? 10e6 : 6e6,
-        audioBitsPerSecond: 192e3
-      });
+      fullAudioBuf = await renderFullTimelineAudioBuffer(totalT);
     } catch (e) {
-      return toast('Không khởi tạo được bộ ghi video.');
+      console.warn('Không thể render audio buffer offline:', e);
     }
-    expRec = rec;
+
+    const fps = 30;
+    const totalFrames = Math.max(1, Math.ceil(totalT * fps));
+    const d = dims();
+    const W = d.W, H = d.H;
+    cv.width = W;
+    cv.height = H;
+
+    // Bộ nhớ đệm khung hình hợp lệ dự phòng (chống khung đen)
+    const lastGoodCanvas = document.createElement('canvas');
+    lastGoodCanvas.width = W;
+    lastGoodCanvas.height = H;
+    let hasGoodFrame = false;
+
+    // Bộ phát hiện khung đen
+    const detectCv = document.createElement('canvas');
+    detectCv.width = 16;
+    detectCv.height = 16;
+    const detectCtx = detectCv.getContext('2d', { willReadFrequently: true });
+    let blackFrameCount = 0;
+    const blackSegments: { start: number; end: number }[] = [];
+    let currentBlackSeg: { start: number; end: number } | null = null;
+
+    // UI Khởi động modal xuất
+    exporting = true;
     expCancel = false;
     expBlob = null;
-    rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-    const stopped = new Promise(r => { rec.onstop = r; });
-    exporting = true;
-    $('#exp').hidden = false;
-    $('#expT').textContent = 'Đang xuất video';
-    $('#expMsg').textContent = 'Giữ tab này mở và đừng chuyển sang tab khác cho tới khi xong. Video được ghi theo thời gian thật.';
-    $('#expBar').style.width = '0%';
-    $('#expVideo').hidden = true;
-    $('#expSave').hidden = true;
-    $('#expClose').textContent = 'Hủy';
+    const expModal = $('#exp');
+    const expT = $('#expT');
+    const expMsg = $('#expMsg');
+    const expBar = $('#expBar');
+    const expWarn = $('#expWarn');
+    const expVideo = $('#expVideo') as HTMLVideoElement | null;
+    const expSave = $('#expSave');
+    const expClose = $('#expClose');
 
+    if (expModal) expModal.hidden = false;
+    if (expT) expT.textContent = 'Đang xuất video (Offline)...';
+    if (expMsg) expMsg.textContent = 'Đang khởi tạo bộ mã hóa từng khung hình chuẩn xác...';
+    if (expBar) expBar.style.width = '0%';
+    if (expWarn) expWarn.hidden = true;
+    if (expVideo) expVideo.hidden = true;
+    if (expSave) expSave.hidden = true;
+    if (expClose) expClose.textContent = 'Hủy';
+
+    // Giữ màn hình sáng (Wake Lock)
     let wl: any = null;
     try { wl = await (navigator as any).wakeLock?.request('screen'); } catch (e) {}
 
-    seek(0);
-    await sleep(250);
-    rec.start(500);
-    endCb = async () => {
-      await sleep(400);
-      if (rec.state !== 'inactive') rec.stop();
-    };
-    play();
-    await stopped;
-    try { wl && wl.release(); } catch (e) {}
+    // Kiểm tra khả năng dùng WebCodecs + mp4-muxer
+    const VideoEncoderClass = (window as any).VideoEncoder;
+    const VideoFrameClass = (window as any).VideoFrame;
+    const AudioEncoderClass = (window as any).AudioEncoder;
+    const AudioDataClass = (window as any).AudioData;
+
+    let useWebCodecs = false;
+    let videoEncoder: any = null;
+    let audioEncoder: any = null;
+    let muxer: any = null;
+
+    if (VideoEncoderClass && VideoFrameClass) {
+      try {
+        const vCheck = await VideoEncoderClass.isConfigSupported({
+          codec: 'avc1.42001f',
+          width: W,
+          height: H,
+          bitrate: S.res >= 1080 ? 8_000_000 : 4_500_000,
+          framerate: fps
+        });
+        if (vCheck.supported) {
+          let canAac = false;
+          if (fullAudioBuf && AudioEncoderClass && AudioDataClass) {
+            try {
+              const aCheck = await AudioEncoderClass.isConfigSupported({
+                codec: 'mp4a.40.2',
+                sampleRate: fullAudioBuf.sampleRate,
+                numberOfChannels: Math.min(2, fullAudioBuf.numberOfChannels),
+                bitrate: 192_000
+              });
+              canAac = !!aCheck.supported;
+            } catch (err) {}
+          }
+          if (!fullAudioBuf || canAac) {
+            useWebCodecs = true;
+            muxer = new Muxer({
+              target: new ArrayBufferTarget(),
+              video: {
+                codec: 'avc',
+                width: W,
+                height: H
+              },
+              audio: (fullAudioBuf && canAac) ? {
+                codec: 'aac',
+                sampleRate: fullAudioBuf.sampleRate,
+                numberOfChannels: Math.min(2, fullAudioBuf.numberOfChannels)
+              } : undefined,
+              fastStart: 'in-memory'
+            });
+
+            videoEncoder = new VideoEncoderClass({
+              output: (chunk: any, meta: any) => muxer.addVideoChunk(chunk, meta),
+              error: (e: any) => console.error('VideoEncoder error:', e)
+            });
+            videoEncoder.configure({
+              codec: 'avc1.42001f',
+              width: W,
+              height: H,
+              bitrate: S.res >= 1080 ? 8_000_000 : 4_500_000,
+              framerate: fps
+            });
+
+            if (fullAudioBuf && canAac) {
+              audioEncoder = new AudioEncoderClass({
+                output: (chunk: any, meta: any) => muxer.addAudioChunk(chunk, meta),
+                error: (e: any) => console.error('AudioEncoder error:', e)
+              });
+              audioEncoder.configure({
+                codec: 'mp4a.40.2',
+                sampleRate: fullAudioBuf.sampleRate,
+                numberOfChannels: Math.min(2, fullAudioBuf.numberOfChannels),
+                bitrate: 192_000
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('WebCodecs init failed, falling back to MediaRecorder:', err);
+        useWebCodecs = false;
+      }
+    }
+
+    try {
+      console.log(`[Export] Bắt đầu xuất video: ${totalFrames} frames, thời lượng ${totalT.toFixed(2)}s, độ phân giải ${W}x${H}, công nghệ: ${useWebCodecs ? 'WebCodecs (Offline MP4 Muxer)' : 'MediaRecorder Frame Stepper'}`);
+
+      // ==========================================
+      // NHÁNH 1: WEBCODECS + MP4-MUXER (SIÊU NHANH, 100% OFFLINE, ĐỘC LẬP VỚI TAB)
+      // ==========================================
+      if (useWebCodecs && muxer && videoEncoder) {
+        // Nén âm thanh offline trước
+        if (fullAudioBuf && audioEncoder && AudioDataClass) {
+          const sampleRate = fullAudioBuf.sampleRate;
+          const numChannels = Math.min(2, fullAudioBuf.numberOfChannels);
+          const totalSamples = fullAudioBuf.length;
+          const chunkSize = 1024;
+          for (let offset = 0; offset < totalSamples; offset += chunkSize) {
+            if (expCancel) break;
+            const chunkLen = Math.min(chunkSize, totalSamples - offset);
+            const planar = new Float32Array(chunkLen * numChannels);
+            for (let ch = 0; ch < numChannels; ch++) {
+              const chSrc = fullAudioBuf.getChannelData(ch);
+              planar.set(chSrc.subarray(offset, offset + chunkLen), ch * chunkLen);
+            }
+            const aData = new AudioDataClass({
+              format: 'f32-planar',
+              sampleRate,
+              numberOfFrames: chunkLen,
+              numberOfChannels: numChannels,
+              timestamp: Math.round((offset / sampleRate) * 1_000_000),
+              data: planar
+            });
+            audioEncoder.encode(aData);
+            aData.close();
+          }
+          await audioEncoder.flush();
+        }
+
+        // Dựng từng khung hình video độc lập
+        for (let i = 0; i < totalFrames; i++) {
+          if (expCancel) break;
+          const t = i / fps;
+          await prepareClipsForFrame(t, fps);
+          renderFrame(t, ctx);
+
+          // Kiểm tra độ sáng khung hình để phát hiện và triệt tiêu khung đen
+          if (detectCtx) {
+            detectCtx.drawImage(cv, 0, 0, 16, 16);
+            const imgData = detectCtx.getImageData(0, 0, 16, 16).data;
+            let maxBr = 0;
+            for (let p = 0; p < imgData.length; p += 4) {
+              const br = Math.max(imgData[p], imgData[p + 1], imgData[p + 2]);
+              if (br > maxBr) maxBr = br;
+            }
+            const isIntentionalBlack = (A.fadeIn > 0 && t < 0.15) || (A.fadeOut > 0 && t > totalT - 0.15);
+            if (maxBr < 6 && !isIntentionalBlack) {
+              blackFrameCount++;
+              if (!currentBlackSeg) currentBlackSeg = { start: t, end: t };
+              else currentBlackSeg.end = t;
+              console.warn(`[Export] Khung đen tại ${t.toFixed(2)}s (frame ${i}/${totalFrames}). Đã tự động thay bằng khung hợp lệ.`);
+              if (hasGoodFrame) {
+                ctx.drawImage(lastGoodCanvas, 0, 0);
+              }
+            } else {
+              if (currentBlackSeg) {
+                blackSegments.push(currentBlackSeg);
+                currentBlackSeg = null;
+              }
+              if (maxBr >= 6) {
+                const gctx = lastGoodCanvas.getContext('2d');
+                if (gctx) gctx.drawImage(cv, 0, 0);
+                hasGoodFrame = true;
+              }
+            }
+          }
+
+          const vFrame = new VideoFrameClass(cv, {
+            timestamp: Math.round((i * 1_000_000) / fps),
+            duration: Math.round(1_000_000 / fps)
+          });
+          videoEncoder.encode(vFrame, { keyFrame: i % (fps * 2) === 0 });
+          vFrame.close();
+
+          // Kiểm soát hàng đợi tránh tràn bộ nhớ (backpressure)
+          if (videoEncoder.encodeQueueSize > 8) {
+            while (videoEncoder.encodeQueueSize > 4 && !expCancel) {
+              await sleep(10);
+            }
+          }
+
+          // Nhả luồng cho UI mỗi 25 khung hình để thanh tiến trình và nút Hủy mượt mà
+          if (i % 25 === 0) {
+            if (expBar) expBar.style.width = Math.round(((i + 1) / totalFrames) * 100) + '%';
+            if (expMsg) expMsg.textContent = `Đang kết xuất khung hình ${i + 1}/${totalFrames} (${t.toFixed(1)}s / ${totalT.toFixed(1)}s) • ${Math.round(((i + 1) / totalFrames) * 100)}%`;
+            await sleep(0);
+          }
+        }
+
+        if (currentBlackSeg) blackSegments.push(currentBlackSeg);
+
+        await videoEncoder.flush();
+        muxer.finalize();
+        expBlob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
+        expName = `lyric-video-${S.orient === 'v' ? '9x16' : '16x9'}-${S.res}p.mp4`;
+
+      } else {
+        // ==========================================
+        // NHÁNH 2: MEDIARECORDER VỚI BỘ ĐIỀU NHỊP ĐỘC LẬP (KHÔNG DÙNG REQUESTANIMATIONFRAME)
+        // ==========================================
+        const mime = pickMime();
+        if (!mime) throw new Error('Trình duyệt không hỗ trợ MediaRecorder MIME format nào.');
+
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const audioDest = audioCtx.createMediaStreamDestination();
+        if (fullAudioBuf) {
+          const src = audioCtx.createBufferSource();
+          src.buffer = fullAudioBuf;
+          src.connect(audioDest);
+          src.start(0);
+        }
+
+        const stream: MediaStream = (cv as any).captureStream ? (cv as any).captureStream(fps) : (cv as any).mozCaptureStream(fps);
+        audioDest.stream.getAudioTracks().forEach(tr => stream.addTrack(tr));
+
+        const rec = new MediaRecorder(stream, {
+          mimeType: mime,
+          videoBitsPerSecond: S.res >= 1080 ? 8e6 : 4.5e6,
+          audioBitsPerSecond: 192e3
+        });
+        expRec = rec;
+        const chunks: Blob[] = [];
+        rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+        const stopped = new Promise(r => { rec.onstop = r; });
+        rec.start(250);
+
+        const frameIntervalMs = 1000 / fps;
+        const exportStartT = performance.now();
+
+        for (let i = 0; i < totalFrames; i++) {
+          if (expCancel) break;
+          const t = i / fps;
+          await prepareClipsForFrame(t, fps);
+          renderFrame(t, ctx);
+
+          if (detectCtx) {
+            detectCtx.drawImage(cv, 0, 0, 16, 16);
+            const imgData = detectCtx.getImageData(0, 0, 16, 16).data;
+            let maxBr = 0;
+            for (let p = 0; p < imgData.length; p += 4) {
+              const br = Math.max(imgData[p], imgData[p + 1], imgData[p + 2]);
+              if (br > maxBr) maxBr = br;
+            }
+            const isIntentionalBlack = (A.fadeIn > 0 && t < 0.15) || (A.fadeOut > 0 && t > totalT - 0.15);
+            if (maxBr < 6 && !isIntentionalBlack) {
+              blackFrameCount++;
+              if (!currentBlackSeg) currentBlackSeg = { start: t, end: t };
+              else currentBlackSeg.end = t;
+              if (hasGoodFrame) ctx.drawImage(lastGoodCanvas, 0, 0);
+            } else {
+              if (currentBlackSeg) { blackSegments.push(currentBlackSeg); currentBlackSeg = null; }
+              if (maxBr >= 6) {
+                const gctx = lastGoodCanvas.getContext('2d');
+                if (gctx) gctx.drawImage(cv, 0, 0);
+                hasGoodFrame = true;
+              }
+            }
+          }
+
+          const vTrack: any = stream.getVideoTracks()[0];
+          if (vTrack && vTrack.requestFrame) {
+            try { vTrack.requestFrame(); } catch (e) {}
+          }
+
+          if (i % 25 === 0) {
+            if (expBar) expBar.style.width = Math.round(((i + 1) / totalFrames) * 100) + '%';
+            if (expMsg) expMsg.textContent = `Đang ghi video: ${fmt(t)} / ${fmt(totalT)} (${Math.round(((i + 1) / totalFrames) * 100)}%)...`;
+          }
+
+          const expectedElapsed = (i + 1) * frameIntervalMs;
+          const actualElapsed = performance.now() - exportStartT;
+          const waitMs = expectedElapsed - actualElapsed;
+          if (waitMs > 1) {
+            await sleep(waitMs);
+          } else {
+            await sleep(0);
+          }
+        }
+
+        if (currentBlackSeg) blackSegments.push(currentBlackSeg);
+
+        await sleep(200);
+        if (rec.state !== 'inactive') rec.stop();
+        await stopped;
+        try { audioCtx.close(); } catch (e) {}
+
+        const type = mime.split(';')[0];
+        const ext = type === 'video/mp4' ? 'mp4' : 'webm';
+        expBlob = new Blob(chunks, { type });
+        expName = `lyric-video-${S.orient === 'v' ? '9x16' : '16x9'}-${S.res}p.${ext}`;
+      }
+
+    } catch (err: any) {
+      console.error('Lỗi quá trình xuất video:', err);
+      toast('Lỗi xuất video: ' + (err?.message || err));
+      if (expMsg) expMsg.textContent = 'Đã xảy ra lỗi trong quá trình xuất: ' + (err?.message || err);
+      if (expClose) expClose.textContent = 'Đóng';
+      exporting = false;
+      cleanupExportVideos();
+      setSize();
+      draw();
+      try { wl && wl.release(); } catch (e) {}
+      return;
+    } finally {
+      cleanupExportVideos();
+      setSize();
+      draw();
+      try { wl && wl.release(); } catch (e) {}
+    }
+
     exporting = false;
-    endCb = null;
-    if (expCancel) { $('#exp').hidden = true; return; }
-    const type = mime.split(';')[0];
-    const ext = type === 'video/mp4' ? 'mp4' : 'webm';
-    expBlob = new Blob(chunks, { type });
-    expName = 'lyric-video-' + (S.orient === 'v' ? '9x16' : '16x9') + '-' + S.res + 'p.' + ext;
-    const v: HTMLVideoElement = $('#expVideo');
-    v.src = URL.createObjectURL(expBlob);
-    v.hidden = false;
-    $('#expT').textContent = 'Video đã xong';
-    $('#expMsg').textContent = 'Xem lại bên dưới, rồi bấm Lưu video.';
-    $('#expBar').style.width = '100%';
-    $('#expSave').hidden = false;
-    $('#expClose').textContent = 'Đóng';
+
+    if (expCancel) {
+      if (expModal) expModal.hidden = true;
+      toast('Đã hủy xuất video.');
+      seek(0);
+      return;
+    }
+
+    if (!expBlob) {
+      toast('Không nhận được dữ liệu video xuất ra.');
+      if (expModal) expModal.hidden = true;
+      return;
+    }
+
+    // Hiển thị kết quả thành công và cảnh báo nếu có khung đen hoặc khung bù
+    if (expT) expT.textContent = '✓ Video đã xuất thành công!';
+    if (expBar) expBar.style.width = '100%';
+    const sizeMb = (expBlob.size / (1024 * 1024)).toFixed(2);
+    if (expMsg) {
+      expMsg.textContent = `Đã hoàn tất kết xuất • Dung lượng: ${sizeMb} MB • Thời lượng: ${fmt(totalT)} • Độ nét: ${S.res}p (${S.orient === 'v' ? '9:16 Dọc' : '16:9 Ngang'}).`;
+    }
+
+    const btnReopen = $('#btnReopenExport');
+    if (btnReopen) btnReopen.hidden = false;
+
+    const fallbackRatio = totalFrames > 0 ? (fallbackFrameCount / totalFrames) : 0;
+    if (expWarn) {
+      if (fallbackRatio > 0.03 || blackFrameCount > 0) {
+        expWarn.hidden = false;
+        const pct = (fallbackRatio * 100).toFixed(1);
+        expWarn.innerHTML = `⚠️ <strong>Lưu ý:</strong> Đã phát hiện ${blackFrameCount} khung đen hoặc video chưa nạp kịp (${pct}% tổng số khung). Hệ thống đã tự động bù khung hợp lệ chuẩn xác (_lastValidCanvas) để video xuất ra liền mạch không bị đen.`;
+      } else {
+        expWarn.hidden = true;
+      }
+    }
+
+    if (expVideo) {
+      expVideo.src = URL.createObjectURL(expBlob);
+      expVideo.hidden = false;
+      expVideo.load();
+    }
+    if (expSave) expSave.hidden = false;
+    if (expClose) expClose.textContent = 'Đóng';
     seek(0);
+    toast('🎉 Đã xuất video hoàn chỉnh không bị đen!');
   }
   async function saveExport() {
     if (!expBlob) return;
@@ -5872,18 +6494,21 @@ export function initStudio() {
   function closeExport() {
     if (exporting) {
       expCancel = true;
+      cleanupExportVideos();
       halt();
       endCb = null;
       if (expRec && expRec.state !== 'inactive') expRec.stop();
       exporting = false;
       $('#exp').hidden = true;
+      setSize();
       draw();
       updateUI();
       return;
     }
+    cleanupExportVideos();
     $('#exp').hidden = true;
     const v: HTMLVideoElement = $('#expVideo');
-    v.pause();
+    if (v) v.pause();
   }
 
   /* ---------- sự kiện ---------- */
@@ -5914,8 +6539,14 @@ export function initStudio() {
       return;
     }
 
-    // Phím Escape: Thoát toàn màn hình hoặc đóng modal phím tắt
+    // Phím Escape: Thoát toàn màn hình, đóng modal xuất video, hoặc đóng modal phím tắt
     if (e.code === 'Escape' || e.key === 'Escape') {
+      const expModal = $('#exp');
+      if (expModal && !expModal.hidden) {
+        e.preventDefault();
+        closeExport();
+        return;
+      }
       const modal = $('#shortcutsModal');
       if (modal && !modal.hidden) {
         e.preventDefault();
@@ -8215,11 +8846,11 @@ export function initStudio() {
 
           if (lyrDragTip) {
             lyrDragTip.style.display = 'block';
-            lyrDragTip.textContent = `◀ Bắt đầu: ${fmt(lyrDragItem.t)} | Dài: ${(lyrInitEndT - lyrDragItem.t).toFixed(2)}s [Hàng ${curLane + 1}]`;
+            lyrDragTip.textContent = `◀ ${fmt(lyrDragItem.t)} ➔ ${fmt(lyrInitEndT)}`;
             const tlScroll = $('#tlScroll');
-            const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, width: 600 };
-            lyrDragTip.style.left = clamp(e.clientX - tlRect.left, 20, tlRect.width - 240) + 'px';
-            lyrDragTip.style.top = '110px';
+            const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, top: 0, width: 600, height: 200 };
+            lyrDragTip.style.left = clamp(e.clientX - tlRect.left + 14, 10, tlRect.width - 180) + 'px';
+            lyrDragTip.style.top = clamp(e.clientY - tlRect.top - 28, 4, tlRect.height - 30) + 'px';
           }
 
         } else if (lyrDragMode === 'right') {
@@ -8242,11 +8873,11 @@ export function initStudio() {
 
           if (lyrDragTip) {
             lyrDragTip.style.display = 'block';
-            lyrDragTip.textContent = `▶ Kết thúc: ${fmt(lyrDragItem.endT)} | Dài: ${(lyrDragItem.endT - lyrInitT).toFixed(2)}s [Hàng ${curLane + 1}]`;
+            lyrDragTip.textContent = `▶ ${fmt(lyrInitT)} ➔ ${fmt(lyrDragItem.endT)}`;
             const tlScroll = $('#tlScroll');
-            const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, width: 600 };
-            lyrDragTip.style.left = clamp(e.clientX - tlRect.left, 20, tlRect.width - 240) + 'px';
-            lyrDragTip.style.top = '110px';
+            const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, top: 0, width: 600, height: 200 };
+            lyrDragTip.style.left = clamp(e.clientX - tlRect.left + 14, 10, tlRect.width - 180) + 'px';
+            lyrDragTip.style.top = clamp(e.clientY - tlRect.top - 28, 4, tlRect.height - 30) + 'px';
           }
 
         } else if (lyrDragMode === 'body') {
@@ -8279,15 +8910,12 @@ export function initStudio() {
 
           if (lyrDragTip) {
             lyrDragTip.style.display = 'block';
-            if (isDirectFree) {
-              lyrDragTip.textContent = `Hàng ${lyrTargetLane + 1} • ${fmt(lyrTargetT)} ➔ ${fmt(lyrTargetEndT)} (${dur.toFixed(2)}s)`;
-            } else {
-              lyrDragTip.textContent = `Hàng ${lyrTargetLane + 1} trùng giờ! ➔ Tự nhảy Hàng ${lyrResolvedLane + 1} • ${fmt(lyrTargetT)}`;
-            }
+            const laneLabel = isDirectFree ? `Hàng ${lyrTargetLane + 1}` : `Hàng ${lyrResolvedLane + 1}`;
+            lyrDragTip.textContent = `${fmt(lyrTargetT)} ➔ ${fmt(lyrTargetEndT)} [${laneLabel}]`;
             const tlScroll = $('#tlScroll');
-            const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, width: 600 };
-            lyrDragTip.style.left = clamp(e.clientX - tlRect.left, 20, tlRect.width - 260) + 'px';
-            lyrDragTip.style.top = (topLyrBase + lyrResolvedLane * lyrLaneH - 24) + 'px';
+            const tlRect = tlScroll ? tlScroll.getBoundingClientRect() : { left: 0, top: 0, width: 600, height: 200 };
+            lyrDragTip.style.left = clamp(e.clientX - tlRect.left + 14, 10, tlRect.width - 200) + 'px';
+            lyrDragTip.style.top = clamp(e.clientY - tlRect.top - 28, 4, tlRect.height - 30) + 'px';
           }
         }
       });
@@ -8307,7 +8935,15 @@ export function initStudio() {
             S.lyr.sort((a, b) => a.t - b.t);
             syncLyrToEditor(true);
             seek(lyrTargetT);
-            toast(`Đã xếp câu vào Hàng ${lyrResolvedLane + 1} [${fmt(lyrTargetT)} ➔ ${fmt(lyrTargetEndT)}]`);
+
+            // Phản hồi viền sáng 0.5s trên khối câu vừa thả, KHÔNG hiện toast
+            justDroppedLyrId = lyrDragItem.id;
+            clearTimeout(justDroppedTimer);
+            justDroppedTimer = setTimeout(() => {
+              justDroppedLyrId = null;
+              document.querySelectorAll('.lyr-block.lyr-just-dropped').forEach(el => el.classList.remove('lyr-just-dropped'));
+            }, 500);
+            renderTimeline();
           } else if (lyrDragItem) {
             seek(lyrDragItem.t);
           }
@@ -8316,7 +8952,15 @@ export function initStudio() {
             pushLyricHistory();
             S.lyr.sort((a, b) => a.t - b.t);
             syncLyrToEditor(true);
-            toast(`Đã chỉnh độ dài câu: ${(lyrDragItem.endT - lyrDragItem.t).toFixed(2)}s`);
+
+            // Phản hồi viền sáng 0.5s trên khối câu vừa chỉnh mép, KHÔNG hiện toast
+            justDroppedLyrId = lyrDragItem.id;
+            clearTimeout(justDroppedTimer);
+            justDroppedTimer = setTimeout(() => {
+              justDroppedLyrId = null;
+              document.querySelectorAll('.lyr-block.lyr-just-dropped').forEach(el => el.classList.remove('lyr-just-dropped'));
+            }, 500);
+            renderTimeline();
           }
         }
 
@@ -8462,6 +9106,42 @@ export function initStudio() {
     safeClick('#btnExport', exportVideo);
     safeClick('#expSave', saveExport);
     safeClick('#expClose', closeExport);
+    safeClick('#btnExpCloseX', closeExport);
+
+    // Đóng hộp thoại khi bấm vào lớp nền tối mờ (backdrop) bên ngoài khung card
+    const expModalEl = $('#exp');
+    if (expModalEl) {
+      expModalEl.addEventListener('click', (e: MouseEvent) => {
+        if (e.target === expModalEl) closeExport();
+      });
+    }
+
+    // Mở lại hộp thoại xem video vừa xuất bất kỳ lúc nào nếu đã xuất
+    safeClick('#btnReopenExport', () => {
+      if (!expBlob) {
+        toast('Chưa có video nào được xuất trong phiên này.');
+        return;
+      }
+      const expModal = $('#exp');
+      if (expModal) expModal.hidden = false;
+      const expT = $('#expT');
+      if (expT) expT.textContent = '✓ Video đã xuất thành công!';
+      const expBar = $('#expBar');
+      if (expBar) expBar.style.width = '100%';
+      const expVideo = $('#expVideo') as HTMLVideoElement | null;
+      if (expVideo) {
+        if (!expVideo.src) {
+          expVideo.src = URL.createObjectURL(expBlob);
+        }
+        expVideo.hidden = false;
+        expVideo.load();
+      }
+      const expSave = $('#expSave');
+      if (expSave) expSave.hidden = false;
+      const expClose = $('#expClose');
+      if (expClose) expClose.textContent = 'Đóng';
+    });
+
     window.addEventListener('resize', onResize);
   }
 

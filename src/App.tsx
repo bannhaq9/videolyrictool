@@ -74,6 +74,10 @@ export default function App() {
             <option value="1080">1080p (nét)</option>
           </select>
 
+          <button className="header-btn" id="btnReopenExport" type="button" hidden title="Mở lại video vừa xuất" style={{ color: 'var(--accent)', fontWeight: 600 }}>
+            🎬 Xem video vừa xuất
+          </button>
+
           <button className="btn-export-teal" id="btnExport" type="button" title="Xuất video hoàn chỉnh">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 19V5M5 12l7-7 7 7"/>
@@ -675,6 +679,9 @@ export default function App() {
               <canvas id="cv" width="720" height="1280"></canvas>
             </div>
 
+            {/* THÔNG BÁO TINH GỌN GÓC TRÊN BÊN PHẢI PREVIEW (BẤM VÀO LÀ TẮT) */}
+            <div id="toast" role="status" hidden title="Bấm vào để tắt thông báo"></div>
+
             {/* THANH ĐIỀU KHIỂN CHẾ ĐỘ TOÀN MÀN HÌNH (FULLSCREEN OVERLAY) */}
             <div className="fs-overlay" id="fsOverlay">
               {/* Nút ✕ ở góc trên phải */}
@@ -1212,20 +1219,44 @@ export default function App() {
         </div>
       </section>
 
-      {/* MODAL XUẤT VIDEO */}
-      <div id="exp" hidden>
-        <div className="card" role="dialog" aria-labelledby="expT" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: '12px', padding: '18px', width: 'min(100%, 460px)', display: 'grid', gap: '12px' }}>
-          <h2 id="expT" style={{ margin: 0, fontSize: '16px' }}>Đang xuất video</h2>
-          <p className="note" id="expMsg">
-            Giữ tab này mở cho tới khi xong. Video được kết xuất theo thời gian thực chuẩn khung hình và âm thanh.
-          </p>
-          <div style={{ height: '8px', borderRadius: '4px', background: 'var(--panel2)', overflow: 'hidden' }}>
-            <i id="expBar" style={{ display: 'block', height: '100%', width: '0%', background: 'var(--accent)', transition: 'width 0.2s' }}></i>
+      {/* MODAL XUẤT VIDEO (GIỮA MÀN HÌNH, NỀN MỜ, NÚT CỐ ĐỊNH Ở ĐÁY) */}
+      <div id="exp" hidden className="exp-modal-backdrop">
+        <div className="card exp-modal-card" role="dialog" aria-labelledby="expT">
+          {/* Phần đầu: Tiêu đề + Dòng mô tả + Nút ✕ */}
+          <div className="exp-modal-header">
+            <div className="exp-modal-header-text">
+              <h2 id="expT" className="exp-modal-title">Đang xuất video</h2>
+              <p className="exp-modal-desc" id="expMsg">
+                Đang xử lý kết xuất từng khung hình chuẩn xác...
+              </p>
+            </div>
+            <button type="button" className="exp-close-x-btn" id="btnExpCloseX" title="Đóng (Esc)">✕</button>
           </div>
-          <video id="expVideo" controls playsInline hidden style={{ width: '100%', maxHeight: '45vh', borderRadius: '6px', background: '#000' }}></video>
-          <div className="btns">
-            <button className="btn pri" id="expSave" hidden>Lưu video về máy</button>
-            <button className="btn" id="expClose">Hủy</button>
+
+          {/* Phần giữa: Thanh tiến trình, Cảnh báo và Video xem lại (tự co và cuộn bên trong) */}
+          <div className="exp-modal-body">
+            <div id="expProgBox" className="exp-prog-box">
+              <div className="exp-prog-track">
+                <i id="expBar" className="exp-prog-fill"></i>
+              </div>
+            </div>
+
+            <div id="expWarn" hidden className="exp-warn-box"></div>
+
+            <div className="exp-video-wrap">
+              <video id="expVideo" controls playsInline hidden className="exp-video-el"></video>
+            </div>
+          </div>
+
+          {/* Phần chân: Hai nút luôn thấy ở đáy hộp thoại, không bị che khuất */}
+          <div className="exp-modal-footer">
+            <button className="btn exp-btn-cancel" id="expClose" type="button">Hủy</button>
+            <button className="btn pri exp-btn-save" id="expSave" hidden type="button">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+              </svg>
+              <span>Lưu video về máy</span>
+            </button>
           </div>
         </div>
       </div>
@@ -1309,8 +1340,6 @@ export default function App() {
           </div>
         </div>
       </div>
-
-      <div id="toast" role="status" hidden></div>
     </div>
   );
 }
