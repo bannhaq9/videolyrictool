@@ -216,7 +216,165 @@ export default function App() {
                 <input id="defTrD" type="number" min="0.1" max="3" step="0.1" defaultValue="0.6" />
               </div>
 
-              <button className="btn" id="applyAll" type="button">Áp dụng cho mọi clip</button>
+              <button className="btn" id="applyAll" type="button" style={{ marginBottom: '12px' }}>Áp dụng thời gian & khung cho mọi clip</button>
+
+              {/* TÙY CHỌN HIỆU ỨNG ẢNH, ÁNH SÁNG, MÀU SẮC, LỚP PHỦ & KEN BURNS CHO MỖI CLIP ẢNH */}
+              <div className="media-photo-fx-box" id="mediaPhotoFxBox">
+                <div className="media-photo-fx-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '13px' }}>🎨</span>
+                    <strong style={{ fontSize: '12px', color: 'var(--fg)' }}>Hiệu ứng ảnh & Ken Burns mỗi clip</strong>
+                  </div>
+                  <span className="badge" id="mediaClipBadge" style={{ fontSize: '10px' }}>Ảnh đang chọn</span>
+                </div>
+
+                {/* Bộ chọn clip ảnh trong dự án */}
+                <div className="field" style={{ marginTop: '8px' }}>
+                  <label htmlFor="selMediaActiveClip">Chọn clip ảnh cần chỉnh:</label>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button type="button" className="btn sm" id="btnMediaPrevClip" title="Clip ảnh trước" style={{ padding: '0 8px' }}>◀</button>
+                    <select id="selMediaActiveClip" style={{ flex: 1 }}></select>
+                    <button type="button" className="btn sm" id="btnMediaNextClip" title="Clip ảnh kế tiếp" style={{ padding: '0 8px' }}>▶</button>
+                  </div>
+                </div>
+
+                {/* 1. Chuyển động Ken Burns (Pan & Zoom) */}
+                <div className="field" style={{ marginTop: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label htmlFor="mClipFx">Chuyển động Ken Burns</label>
+                    <span id="mClipFxHint" style={{ fontSize: '10.5px', color: 'var(--accent)' }}>Phóng to / Thu nhỏ / Lướt</span>
+                  </div>
+                  <select id="mClipFx"></select>
+                  {/* Phím tắt chọn nhanh Ken Burns */}
+                  <div className="ken-burns-quick-grid">
+                    <button type="button" className="btn sm ken-btn" data-fx="zoomin" title="Phóng to nhẹ vào tâm">🔍 Zoom vào</button>
+                    <button type="button" className="btn sm ken-btn" data-fx="zoomout" title="Thu nhỏ nhẹ từ tâm">🔎 Zoom ra</button>
+                    <button type="button" className="btn sm ken-btn" data-fx="panl" title="Lướt ngang sang trái">⬅️ Lướt trái</button>
+                    <button type="button" className="btn sm ken-btn" data-fx="panr" title="Lướt ngang sang phải">➡️ Lướt phải</button>
+                    <button type="button" className="btn sm ken-btn" data-fx="panu" title="Dịch chuyển dọc lên trên">⬆️ Lướt lên</button>
+                    <button type="button" className="btn sm ken-btn" data-fx="pand" title="Dịch chuyển dọc xuống dưới">⬇️ Lướt xuống</button>
+                    <button type="button" className="btn sm ken-btn" data-fx="pandiag_tl_br" title="Lướt chéo từ trái trên xuống phải dưới">↘️ Lướt chéo</button>
+                    <button type="button" className="btn sm ken-btn" data-fx="none" title="Không chuyển động">⏹️ Đứng yên</button>
+                  </div>
+
+                  {/* Nút ngẫu nhiên Ken Burns cho các clip ảnh đã chọn */}
+                  <button
+                    type="button"
+                    className="btn sm"
+                    id="btnRandomKenBurnsSelected"
+                    style={{
+                      width: '100%',
+                      marginTop: '7px',
+                      background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.16) 0%, rgba(99, 102, 241, 0.20) 100%)',
+                      border: '1px solid rgba(56, 189, 248, 0.45)',
+                      color: '#bae6fd',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      padding: '7px 10px',
+                      borderRadius: '6px',
+                      cursor: 'pointer'
+                    }}
+                    title="Áp dụng ngẫu nhiên một hiệu ứng chuyển động Ken Burns cho các clip ảnh đã chọn"
+                  >
+                    <span>🎲</span>
+                    <span>Áp dụng ngẫu nhiên Ken Burns cho ảnh đã chọn</span>
+                  </button>
+                </div>
+
+                {/* 2. Ánh sáng & Màu sắc: Độ sáng, Tương phản, Bão hòa, Nhiệt độ màu */}
+                <div className="media-sliders-group">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent)' }}>☀️ Ánh sáng & Nhiệt độ màu</span>
+                    <button type="button" className="btn sm" id="btnResetPhotoFxMini" style={{ padding: '1px 6px', fontSize: '10.5px' }} title="Đặt lại các thanh trượt về 100%">↺ Đặt lại</button>
+                  </div>
+
+                  {/* Độ sáng */}
+                  <div className="field" style={{ marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label htmlFor="mBrightness" style={{ fontSize: '11px', margin: 0 }}>Độ sáng (Brightness)</label>
+                      <span id="mBrightnessVal" className="val-badge">100%</span>
+                    </div>
+                    <input id="mBrightness" type="range" min="0.5" max="1.5" step="0.02" defaultValue="1" style={{ width: '100%', marginTop: '3px' }} />
+                  </div>
+
+                  {/* Độ tương phản */}
+                  <div className="field" style={{ marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label htmlFor="mContrast" style={{ fontSize: '11px', margin: 0 }}>Độ tương phản (Contrast)</label>
+                      <span id="mContrastVal" className="val-badge">100%</span>
+                    </div>
+                    <input id="mContrast" type="range" min="0.5" max="1.5" step="0.02" defaultValue="1" style={{ width: '100%', marginTop: '3px' }} />
+                  </div>
+
+                  {/* Bão hòa màu sắc */}
+                  <div className="field" style={{ marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label htmlFor="mSaturate" style={{ fontSize: '11px', margin: 0 }}>Bão hòa màu (Saturation)</label>
+                      <span id="mSaturateVal" className="val-badge">100%</span>
+                    </div>
+                    <input id="mSaturate" type="range" min="0.0" max="2.0" step="0.05" defaultValue="1" style={{ width: '100%', marginTop: '3px' }} />
+                  </div>
+
+                  {/* Nhiệt độ màu */}
+                  <div className="field" style={{ marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label htmlFor="mTemperature" style={{ fontSize: '11px', margin: 0 }}>Nhiệt độ màu (Lạnh ❄️ / Ấm ☀️)</label>
+                      <span id="mTempVal" className="val-badge">0 (Chuẩn)</span>
+                    </div>
+                    <input id="mTemperature" type="range" min="-50" max="50" step="1" defaultValue="0" style={{ width: '100%', marginTop: '3px' }} />
+                  </div>
+                </div>
+
+                {/* 3. Lớp phủ nghệ thuật (Overlays) & Bộ lọc màu */}
+                <div className="row2" style={{ marginTop: '8px' }}>
+                  <div className="field">
+                    <label htmlFor="mOverlay">Lớp phủ (Overlay)</label>
+                    <select id="mOverlay"></select>
+                  </div>
+                  <div className="field">
+                    <label htmlFor="mColorFilter">Tông màu (Filter)</label>
+                    <select id="mColorFilter"></select>
+                  </div>
+                </div>
+
+                {/* Nút thao tác nhanh */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+                  <button
+                    type="button"
+                    className="btn sm"
+                    id="btnRandomPhotoFxAll"
+                    style={{
+                      width: '100%',
+                      background: 'linear-gradient(135deg, rgba(234, 88, 12, 0.22) 0%, rgba(245, 158, 11, 0.28) 100%)',
+                      border: '1px solid #f59e0b',
+                      color: '#fef08a',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      cursor: 'pointer'
+                    }}
+                    title="Ngẫu nhiên hiệu ứng Ken Burns, lớp phủ và ánh sáng khác nhau cho từng ảnh để video sinh động hơn"
+                  >
+                    <span>🎲</span>
+                    <span>Áp dụng hiệu ứng ngẫu nhiên cho tất cả ảnh</span>
+                  </button>
+                  <div className="btns" style={{ margin: 0 }}>
+                    <button type="button" className="btn sm pri" id="btnApplyPhotoFxAll" style={{ flex: 1.2 }} title="Áp dụng các hiệu ứng màu & chuyển động hiện tại cho tất cả ảnh trên timeline">
+                      ⚡ Áp dụng cho TẤT CẢ ảnh
+                    </button>
+                    <button type="button" className="btn sm" id="btnResetPhotoFx" style={{ flex: 0.8 }} title="Đặt lại độ sáng, màu sắc và nhiệt độ màu về mặc định">
+                      ↩ Đặt lại gốc
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* TAB NHẠC */}
@@ -457,6 +615,129 @@ export default function App() {
               </div>
 
               <div id="lyrStep2Pane" style={{ display: 'none', flexDirection: 'column', gap: '10px' }}>
+                {/* KHỐI CĂN GIỜ TỰ ĐỘNG BẰNG AI (WHISPER IN-BROWSER) */}
+                <div className="lyr-ai-sync-box" id="lyrAiSyncBox">
+                  <div className="lyr-ai-sync-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="lyr-ai-sparkle-icon">✨</span>
+                      <div>
+                        <strong style={{ fontSize: '13px', color: '#c084fc' }}>Căn giờ tự động bằng AI</strong>
+                        <div style={{ fontSize: '10.5px', color: 'var(--muted)' }}>Nhận dạng giọng hát & tự động khớp lời</div>
+                      </div>
+                    </div>
+                    <span className="badge" id="aiHardwareBadge" style={{ fontSize: '10px', background: 'rgba(139, 92, 246, 0.15)', color: '#c084fc', border: '1px solid rgba(168, 85, 247, 0.3)' }}>
+                      🔒 Chạy trong trình duyệt
+                    </span>
+                  </div>
+
+                  {/* Cảnh báo thiếu điều kiện (nếu thiếu nhạc hoặc thiếu câu) */}
+                  <div id="aiMissingNotice" style={{ display: 'none', padding: '8px 10px', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', fontSize: '11px', color: '#fca5a5' }}>
+                    <span id="aiMissingText">Vui lòng thêm nhạc và nhập lời trước khi căn tự động.</span>
+                  </div>
+
+                  {/* Bảng tùy chọn AI */}
+                  <div id="aiOptionsPane" style={{ display: 'grid', gap: '8px' }}>
+                    <div className="row2" style={{ gap: '6px' }}>
+                      <div className="field">
+                        <label htmlFor="selAiQuality" style={{ fontSize: '11px' }}>Chất lượng nhận dạng</label>
+                        <select id="selAiQuality" defaultValue="base" style={{ fontSize: '11.5px', padding: '4px 6px' }}>
+                          <option value="tiny">⚡ Nhanh (Tiny ~75MB)</option>
+                          <option value="base">⚖️ Cân bằng (Base ~145MB - Mặc định)</option>
+                          <option value="small">🎯 Chính xác (Small ~460MB - cần máy mạnh)</option>
+                        </select>
+                      </div>
+                      <div className="field">
+                        <label htmlFor="selAiLang" style={{ fontSize: '11px' }}>Ngôn ngữ bài hát</label>
+                        <select id="selAiLang" defaultValue="vi" style={{ fontSize: '11.5px', padding: '4px 6px' }}>
+                          <option value="vi">Tiếng Việt (Mặc định)</option>
+                          <option value="en">Tiếng Anh (English)</option>
+                          <option value="auto">Tự động nhận diện</option>
+                          <option value="ja">Tiếng Nhật (Japanese)</option>
+                          <option value="ko">Tiếng Hàn (Korean)</option>
+                          <option value="zh">Tiếng Trung (Chinese)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="field">
+                      <label htmlFor="selAiScope" style={{ fontSize: '11px' }}>Phạm vi căn giờ</label>
+                      <select id="selAiScope" defaultValue="all" style={{ fontSize: '11.5px', padding: '4px 6px' }}>
+                        <option value="all">Căn lại tất cả các câu</option>
+                        <option value="unsynced">Chỉ căn các câu chưa có giờ</option>
+                      </select>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1px' }}>
+                      <span style={{ fontSize: '10.5px', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>🔒</span> Nhạc được xử lý ngay trên máy bạn, không gửi đi đâu.
+                      </span>
+                    </div>
+
+                    {/* Nút chính bắt đầu căn AI */}
+                    <button
+                      type="button"
+                      className="btn pri lyr-ai-start-btn"
+                      id="btnRunAiSync"
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        background: 'linear-gradient(135deg, #7c3aed 0%, #2563eb 100%)',
+                        color: '#fff',
+                        fontWeight: 700,
+                        fontSize: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        border: 'none',
+                        boxShadow: '0 2px 10px rgba(124, 58, 237, 0.35)'
+                      }}
+                    >
+                      <span>✨</span>
+                      <span id="btnRunAiSyncText">Căn giờ tự động (AI)</span>
+                    </button>
+                  </div>
+
+                  {/* Bảng tiến trình khi AI đang chạy */}
+                  <div id="aiProgressPane" style={{ display: 'none', flexDirection: 'column', gap: '8px', padding: '10px', background: 'var(--panel)', borderRadius: '8px', border: '1px solid var(--line)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span id="aiProgressStatusMsg" style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--fg)' }}>Đang chuẩn bị...</span>
+                      <button type="button" className="btn sm danger" id="btnCancelAiSync" style={{ padding: '2px 8px', fontSize: '11px' }}>
+                        ✕ Hủy
+                      </button>
+                    </div>
+
+                    {/* Thanh tiến trình */}
+                    <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div id="aiProgressBar" style={{ width: '0%', height: '100%', background: 'linear-gradient(90deg, #8b5cf6, #06b6d4)', transition: 'width 0.25s ease' }}></div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10.5px', color: 'var(--muted)' }}>
+                      <span id="aiDeviceNotice">Đang kiểm tra phần cứng...</span>
+                      <span id="aiProgressPercent">0%</span>
+                    </div>
+                  </div>
+
+                  {/* Bảng kết quả sau khi căn AI thành công */}
+                  <div id="aiResultPane" style={{ display: 'none', flexDirection: 'column', gap: '8px', padding: '10px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span id="aiResultTitle" style={{ fontSize: '12px', fontWeight: 700, color: '#34d399' }}>✓ Đã căn giờ thành công!</span>
+                      <button type="button" className="btn sm" id="btnAiDismissResult" style={{ padding: '1px 6px', fontSize: '10.5px' }}>✕</button>
+                    </div>
+                    <div id="aiResultSummary" style={{ fontSize: '11.5px', color: 'var(--fg)', lineHeight: 1.4 }}></div>
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                      <button type="button" className="btn sm pri" id="btnAiGoToStep3" style={{ flex: 1, padding: '5px 8px', fontSize: '11.5px' }}>
+                        ➔ Chỉnh sửa ở Bước 3
+                      </button>
+                      <button type="button" className="btn sm" id="btnAiUpgradeQuality" style={{ flex: 1, padding: '5px 8px', fontSize: '11.5px' }} title="Chạy lại với mô hình Whisper lớn hơn để tăng độ chuẩn xác">
+                        ⚡ Tăng chất lượng
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Cảnh báo khi chưa có nhạc */}
                 <div id="lyrNoAudioNotice" style={{ display: 'none', padding: '20px 14px', background: 'var(--panel2)', border: '1px dashed var(--line)', borderRadius: '10px', textAlign: 'center' }}>
                   <div style={{ fontSize: '28px', marginBottom: '8px' }}>🎵</div>
@@ -585,6 +866,50 @@ export default function App() {
                   <span id="lyrCardsTotalBadge" className="badge neutral">0 câu</span>
                   <button className="btn sm" id="btnBackToStep2" type="button">🎙️ Căn lại giờ</button>
                 </div>
+
+                {/* BẢNG TỪ NHẬN DẠNG AI (KÉO THẢ DRAG & DROP VÀO CÂU ĐỂ KHỚP THỦ CÔNG) */}
+                <div className="ai-words-tray-box" id="aiWordsTrayBox">
+                  <div className="ai-words-tray-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span className="ai-tray-icon">✨</span>
+                      <strong style={{ fontSize: '11.5px', color: '#c084fc' }}>Từ nhận dạng AI</strong>
+                      <span id="aiWordsCountBadge" className="badge neutral" style={{ fontSize: '9.5px', padding: '0 5px' }}>0 từ</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <button type="button" className="btn sm" id="btnAiScrollToPlayhead" title="Cuộn tới từ ứng với vị trí playhead hiện tại" style={{ padding: '2px 6px', fontSize: '10.5px' }}>
+                        📍 Vị trí phát
+                      </button>
+                      <button type="button" className="btn sm" id="btnToggleAiTray" title="Thu gọn / Mở rộng bảng từ" style={{ padding: '2px 6px', fontSize: '10.5px' }}>
+                        ▲ Thu gọn
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Thanh tìm kiếm & gợi ý kéo thả */}
+                  <div className="ai-words-tray-subbar" id="aiWordsSubBar">
+                    <input
+                      type="text"
+                      id="aiWordsSearchInput"
+                      placeholder="🔍 Tìm từ trong bài hát..."
+                      style={{ flex: 1, padding: '3px 7px', fontSize: '11px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: '4px', color: 'var(--fg)' }}
+                    />
+                    <span style={{ fontSize: '10px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                      💡 Kéo thả từ vào thẻ câu để gán giờ
+                    </span>
+                  </div>
+
+                  {/* Khung chứa các chip từ có thể kéo thả */}
+                  <div className="ai-words-chips-container" id="aiWordsChipsContainer">
+                    <div className="ai-words-empty-notice" id="aiWordsEmptyNotice">
+                      <span>Chưa có từ AI nào. Bấm </span>
+                      <button type="button" className="btn sm pri" id="btnGoToAiSyncFromTray" style={{ padding: '1px 6px', fontSize: '10.5px', margin: '0 4px' }}>
+                        ⚡ Căn giờ AI (Bước 2)
+                      </button>
+                      <span> để nhận dạng từ bài hát.</span>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="lyr-cards-list" id="lyrCardsList"></div>
                 <button className="btn sm danger" id="lyrClearAllTimes" type="button" style={{ marginTop: '6px' }}>🗑️ Xóa toàn bộ giờ</button>
               </div>
@@ -835,6 +1160,46 @@ export default function App() {
               <div className="field">
                 <label htmlFor="iCol">Bộ lọc màu</label>
                 <select id="iCol"></select>
+              </div>
+
+              {/* TÙY CHỈNH ÁNH SÁNG, MÀU SẮC & LỚP PHỦ CHO CLIP ẢNH */}
+              <div id="iPhotoFxGroup" style={{ background: 'var(--panel2)', padding: '10px', borderRadius: '8px', border: '1px solid var(--line)', marginTop: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent)' }}>☀️ Ánh sáng, Màu sắc & Lớp phủ</span>
+                  <button type="button" className="btn sm" id="btnResetInspPhotoFx" style={{ padding: '1px 6px', fontSize: '10.5px' }} title="Đặt lại về mặc định">↺ Đặt lại</button>
+                </div>
+                <div className="field" style={{ marginBottom: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label htmlFor="iBrightness" style={{ fontSize: '11px', margin: 0 }}>Độ sáng</label>
+                    <span id="iBrightnessVal" style={{ fontSize: '10.5px', fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>100%</span>
+                  </div>
+                  <input id="iBrightness" type="range" min="0.5" max="1.5" step="0.02" defaultValue="1" style={{ width: '100%', marginTop: '3px' }} />
+                </div>
+                <div className="field" style={{ marginBottom: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label htmlFor="iContrast" style={{ fontSize: '11px', margin: 0 }}>Độ tương phản</label>
+                    <span id="iContrastVal" style={{ fontSize: '10.5px', fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>100%</span>
+                  </div>
+                  <input id="iContrast" type="range" min="0.5" max="1.5" step="0.02" defaultValue="1" style={{ width: '100%', marginTop: '3px' }} />
+                </div>
+                <div className="field" style={{ marginBottom: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label htmlFor="iSaturate" style={{ fontSize: '11px', margin: 0 }}>Bão hòa màu</label>
+                    <span id="iSaturateVal" style={{ fontSize: '10.5px', fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>100%</span>
+                  </div>
+                  <input id="iSaturate" type="range" min="0.0" max="2.0" step="0.05" defaultValue="1" style={{ width: '100%', marginTop: '3px' }} />
+                </div>
+                <div className="field" style={{ marginBottom: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label htmlFor="iTemperature" style={{ fontSize: '11px', margin: 0 }}>Nhiệt độ màu</label>
+                    <span id="iTempVal" style={{ fontSize: '10.5px', fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>0 (Chuẩn)</span>
+                  </div>
+                  <input id="iTemperature" type="range" min="-50" max="50" step="1" defaultValue="0" style={{ width: '100%', marginTop: '3px' }} />
+                </div>
+                <div className="field" style={{ marginBottom: '2px' }}>
+                  <label htmlFor="iOverlay" style={{ fontSize: '11px' }}>Lớp phủ (Overlay)</label>
+                  <select id="iOverlay"></select>
+                </div>
               </div>
 
               <div className="field" style={{ marginTop: '4px' }}>

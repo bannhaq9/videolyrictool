@@ -4,6 +4,7 @@
  */
 import { renderTrimmedAudio, audioBufferToWav, audioBufferToMp3, downloadBlob } from './audioExporter';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
+import { alignLyricsWithWhisper, removeVietnameseTones } from './lyricAligner';
 
 declare global {
   interface Window {
@@ -30,7 +31,77 @@ export function initStudio() {
     if (el) el.addEventListener(ev, fn);
   };
   const FONTS = ['Be Vietnam Pro', 'Montserrat', 'Playfair Display', 'Oswald', 'Quicksand', 'Dancing Script', 'Lobster', 'Pacifico'];
-  const FX: Record<string, string> = { none: 'Đứng yên', zoomin: 'Zoom vào', zoomout: 'Zoom ra', panl: 'Lướt sang trái', panr: 'Lướt sang phải' };
+  
+  const FX_GROUPS = [
+    {
+      group: 'Cơ bản',
+      items: [
+        { key: 'none', label: 'Đứng yên (Tĩnh)', icon: '⏹️' },
+      ]
+    },
+    {
+      group: 'Phóng to (Zoom In)',
+      items: [
+        { key: 'zoomin', label: 'Zoom vào tâm (Nhẹ)', icon: '🔍' },
+        { key: 'zoomin_fast', label: 'Zoom vào tâm (Mạnh)', icon: '🔎' },
+        { key: 'zoomin_left', label: 'Zoom vào dạt trái', icon: '↖️' },
+        { key: 'zoomin_right', label: 'Zoom vào dạt phải', icon: '↗️' },
+        { key: 'zoomin_up', label: 'Zoom vào dạt lên trên', icon: '⬆️' },
+        { key: 'zoomin_down', label: 'Zoom vào dạt xuống dưới', icon: '⬇️' }
+      ]
+    },
+    {
+      group: 'Thu nhỏ (Zoom Out)',
+      items: [
+        { key: 'zoomout', label: 'Zoom ra tâm (Nhẹ)', icon: '🔎' },
+        { key: 'zoomout_fast', label: 'Zoom ra tâm (Mạnh)', icon: '🔍' },
+        { key: 'zoomout_left', label: 'Zoom ra dạt trái', icon: '↙️' },
+        { key: 'zoomout_right', label: 'Zoom ra dạt phải', icon: '↘️' },
+        { key: 'zoomout_up', label: 'Zoom ra dạt lên trên', icon: '⬆️' },
+        { key: 'zoomout_down', label: 'Zoom ra dạt xuống dưới', icon: '⬇️' }
+      ]
+    },
+    {
+      group: 'Dịch chuyển ngang (Pan Ngang)',
+      items: [
+        { key: 'panl', label: 'Lướt sang trái (Pan Left)', icon: '⬅️' },
+        { key: 'panr', label: 'Lướt sang phải (Pan Right)', icon: '➡️' }
+      ]
+    },
+    {
+      group: 'Dịch chuyển dọc (Pan Dọc)',
+      items: [
+        { key: 'panu', label: 'Lướt lên trên (Pan Up)', icon: '⬆️' },
+        { key: 'pand', label: 'Lướt xuống dưới (Pan Down)', icon: '⬇️' }
+      ]
+    },
+    {
+      group: 'Dịch chuyển chéo (Diagonal)',
+      items: [
+        { key: 'pandiag_tl_br', label: 'Chéo: Trái-Trên ➔ Phải-Dưới', icon: '↘️' },
+        { key: 'pandiag_bl_tr', label: 'Chéo: Trái-Dưới ➔ Phải-Trên', icon: '↗️' },
+        { key: 'pandiag_tr_bl', label: 'Chéo: Phải-Trên ➔ Trái-Dưới', icon: '↙️' },
+        { key: 'pandiag_br_tl', label: 'Chéo: Phải-Dưới ➔ Trái-Trên', icon: '↖️' }
+      ]
+    }
+  ];
+
+  const FX: Record<string, string> = {};
+  const FX_ICONS: Record<string, string> = {};
+  FX_GROUPS.forEach(g => g.items.forEach(it => {
+    FX[it.key] = it.label;
+    FX_ICONS[it.key] = it.icon;
+  }));
+
+  const OVERLAYS: Record<string, string> = {
+    none: 'Không có (Gốc)',
+    vignette: '🎬 Viền tối điện ảnh (Vignette)',
+    warm_leak: '☀️ Vệt nắng ấm (Golden Hour)',
+    cool_neon: '🌌 Ánh tím Cyber (Cool Duo)',
+    vintage_grain: '🎞️ Phim cổ điển (Retro Vintage)',
+    soft_glow: '✨ Màn sương dịu (Dreamy Glow)',
+    sunset: '🌅 Hoàng hôn rực rỡ (Sunset Gradient)'
+  };
   const TR_GROUPS = [
     {
       group: 'Cơ bản',
@@ -148,6 +219,11 @@ export function initStudio() {
     sample: boolean;
     _lastValidCanvas?: HTMLCanvasElement | null;
     exportEl?: HTMLVideoElement | null;
+    brightness?: number;
+    contrast?: number;
+    saturate?: number;
+    temperature?: number;
+    overlay?: string;
   }
 
   interface LyricItem {
@@ -159,6 +235,8 @@ export function initStudio() {
     color?: string;
     hi?: string;
     size?: number;
+    needsReview?: boolean;
+    confidence?: number;
   }
 
   interface AudioBlock {
@@ -175,6 +253,7 @@ export function initStudio() {
     mediaList: [] as MediaItem[],
     clips: [] as Clip[],
     sel: null as number | null,
+    selectedClipIds: [] as number[],
     selLyrId: null as number | null,
     audioBlocks: [] as AudioBlock[],
     selAudioId: null as number | null,
@@ -395,6 +474,11 @@ export function initStudio() {
       tr: S.def.tr,
       trDur: S.def.trDur || 0.6,
       color: 'none',
+      brightness: 1.0,
+      contrast: 1.0,
+      saturate: 1.0,
+      temperature: 0,
+      overlay: 'none',
       thumb: '',
       sample: false
     }, o) as Clip;
@@ -715,7 +799,83 @@ export function initStudio() {
     return { w: el.videoWidth || el.naturalWidth || el.width || 1, h: el.videoHeight || el.naturalHeight || el.height || 1 };
   }
 
-  function drawMedia(c: Clip, local: number, o: { zoom?: number; alpha?: number; dx?: number }, targetCtx: CanvasRenderingContext2D = ctx) {
+  function computeClipFilter(c: Clip): string {
+    const parts: string[] = [];
+    const preset = c.color && FILTERS[c.color] && c.color !== 'none' ? FILTERS[c.color] : '';
+    if (preset && preset !== 'none') {
+      parts.push(preset);
+    }
+    const b = typeof c.brightness === 'number' ? c.brightness : 1.0;
+    if (Math.abs(b - 1.0) > 0.01) {
+      parts.push(`brightness(${b.toFixed(2)})`);
+    }
+    const ct = typeof c.contrast === 'number' ? c.contrast : 1.0;
+    if (Math.abs(ct - 1.0) > 0.01) {
+      parts.push(`contrast(${ct.toFixed(2)})`);
+    }
+    const sat = typeof c.saturate === 'number' ? c.saturate : 1.0;
+    if (Math.abs(sat - 1.0) > 0.01) {
+      parts.push(`saturate(${sat.toFixed(2)})`);
+    }
+    const temp = typeof c.temperature === 'number' ? c.temperature : 0;
+    if (temp > 0) {
+      const sepiaVal = (temp / 50) * 0.35;
+      parts.push(`sepia(${sepiaVal.toFixed(2)})`);
+    } else if (temp < 0) {
+      const hueVal = (temp / 50) * 20;
+      parts.push(`hue-rotate(${hueVal.toFixed(1)}deg)`);
+    }
+    return parts.length > 0 ? parts.join(' ') : 'none';
+  }
+
+  function drawClipOverlay(ctx: CanvasRenderingContext2D, overlay: string, W: number, H: number) {
+    if (!overlay || overlay === 'none') return;
+    if (overlay === 'vignette') {
+      const vig = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.72);
+      vig.addColorStop(0, 'rgba(0,0,0,0)');
+      vig.addColorStop(0.7, 'rgba(0,0,0,0.22)');
+      vig.addColorStop(1, 'rgba(0,0,0,0.72)');
+      ctx.fillStyle = vig;
+      ctx.fillRect(0, 0, W, H);
+    } else if (overlay === 'warm_leak') {
+      const wl = ctx.createRadialGradient(W * 0.1, H * 0.1, 0, W * 0.1, H * 0.1, Math.max(W, H) * 0.85);
+      wl.addColorStop(0, 'rgba(255, 180, 50, 0.42)');
+      wl.addColorStop(0.4, 'rgba(255, 130, 40, 0.20)');
+      wl.addColorStop(1, 'rgba(255, 100, 30, 0)');
+      ctx.fillStyle = wl;
+      ctx.fillRect(0, 0, W, H);
+    } else if (overlay === 'cool_neon') {
+      const cn = ctx.createLinearGradient(0, 0, W, H);
+      cn.addColorStop(0, 'rgba(192, 38, 211, 0.22)');
+      cn.addColorStop(0.5, 'rgba(0, 0, 0, 0)');
+      cn.addColorStop(1, 'rgba(6, 182, 212, 0.24)');
+      ctx.fillStyle = cn;
+      ctx.fillRect(0, 0, W, H);
+    } else if (overlay === 'vintage_grain') {
+      const sep = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.7);
+      sep.addColorStop(0, 'rgba(245, 158, 11, 0.08)');
+      sep.addColorStop(0.65, 'rgba(180, 83, 9, 0.18)');
+      sep.addColorStop(1, 'rgba(20, 10, 5, 0.65)');
+      ctx.fillStyle = sep;
+      ctx.fillRect(0, 0, W, H);
+    } else if (overlay === 'soft_glow') {
+      const sg = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.65);
+      sg.addColorStop(0, 'rgba(255, 255, 255, 0.20)');
+      sg.addColorStop(0.5, 'rgba(255, 255, 255, 0.06)');
+      sg.addColorStop(1, 'rgba(0, 0, 0, 0.15)');
+      ctx.fillStyle = sg;
+      ctx.fillRect(0, 0, W, H);
+    } else if (overlay === 'sunset') {
+      const ss = ctx.createLinearGradient(0, 0, 0, H);
+      ss.addColorStop(0, 'rgba(244, 63, 94, 0.24)');
+      ss.addColorStop(0.5, 'rgba(249, 115, 22, 0.16)');
+      ss.addColorStop(1, 'rgba(99, 102, 241, 0.24)');
+      ctx.fillStyle = ss;
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  function drawMedia(c: Clip, local: number, o: { zoom?: number; alpha?: number; dx?: number; dy?: number }, targetCtx: CanvasRenderingContext2D = ctx) {
     const W = cv.width, H = cv.height;
     const el = (isExportMode && c.exportEl) ? c.exportEl : c.el;
     if (!el) return;
@@ -732,18 +892,82 @@ export function initStudio() {
     }
     const { w, h } = srcSize(el);
     const p = c.dur > 0 ? local / c.dur : 0;
-    let z = 1, px = 0;
-    if (c.fx === 'zoomin') z = 1 + 0.12 * p;
-    else if (c.fx === 'zoomout') z = 1.12 - 0.12 * p;
-    else if (c.fx === 'panl') { z = 1.1; px = (0.5 - p) * 0.08; }
-    else if (c.fx === 'panr') { z = 1.1; px = (p - 0.5) * 0.08; }
+    let z = 1, px = 0, py = 0;
+    const fx = c.fx || 'none';
+
+    // Ken Burns Transformations: Phóng to, Thu nhỏ, Dịch chuyển ngang/dọc/chéo
+    if (fx === 'zoomin') {
+      z = 1.0 + 0.15 * p;
+    } else if (fx === 'zoomin_fast') {
+      z = 1.0 + 0.32 * p;
+    } else if (fx === 'zoomin_left') {
+      z = 1.0 + 0.18 * p;
+      px = -0.06 * p;
+    } else if (fx === 'zoomin_right') {
+      z = 1.0 + 0.18 * p;
+      px = 0.06 * p;
+    } else if (fx === 'zoomin_up') {
+      z = 1.0 + 0.18 * p;
+      py = -0.06 * p;
+    } else if (fx === 'zoomin_down') {
+      z = 1.0 + 0.18 * p;
+      py = 0.06 * p;
+    } else if (fx === 'zoomout') {
+      z = 1.15 - 0.15 * p;
+    } else if (fx === 'zoomout_fast') {
+      z = 1.32 - 0.32 * p;
+    } else if (fx === 'zoomout_left') {
+      z = 1.18 - 0.18 * p;
+      px = (1 - p) * -0.06;
+    } else if (fx === 'zoomout_right') {
+      z = 1.18 - 0.18 * p;
+      px = (1 - p) * 0.06;
+    } else if (fx === 'zoomout_up') {
+      z = 1.18 - 0.18 * p;
+      py = (1 - p) * -0.06;
+    } else if (fx === 'zoomout_down') {
+      z = 1.18 - 0.18 * p;
+      py = (1 - p) * 0.06;
+    } else if (fx === 'panl') {
+      z = 1.12;
+      px = (0.5 - p) * 0.10;
+    } else if (fx === 'panr') {
+      z = 1.12;
+      px = (p - 0.5) * 0.10;
+    } else if (fx === 'panu') {
+      z = 1.12;
+      py = (0.5 - p) * 0.10;
+    } else if (fx === 'pand') {
+      z = 1.12;
+      py = (p - 0.5) * 0.10;
+    } else if (fx === 'pandiag_tl_br') {
+      z = 1.14;
+      px = (p - 0.5) * 0.08;
+      py = (p - 0.5) * 0.08;
+    } else if (fx === 'pandiag_bl_tr') {
+      z = 1.14;
+      px = (p - 0.5) * 0.08;
+      py = (0.5 - p) * 0.08;
+    } else if (fx === 'pandiag_tr_bl') {
+      z = 1.14;
+      px = (0.5 - p) * 0.08;
+      py = (p - 0.5) * 0.08;
+    } else if (fx === 'pandiag_br_tl') {
+      z = 1.14;
+      px = (0.5 - p) * 0.08;
+      py = (0.5 - p) * 0.08;
+    }
+
     z *= (o.zoom || 1);
     targetCtx.save();
     targetCtx.globalAlpha = o.alpha == null ? 1 : o.alpha;
-    targetCtx.translate(W / 2 + (o.dx || 0) + px * W, H / 2);
+    targetCtx.translate(W / 2 + (o.dx || 0) + px * W, H / 2 + (o.dy || 0) + py * H);
     targetCtx.scale(z, z);
     targetCtx.translate(-W / 2, -H / 2);
-    if (c.color !== 'none' && 'filter' in targetCtx) (targetCtx as any).filter = FILTERS[c.color];
+
+    const filterStr = computeClipFilter(c);
+    if (filterStr !== 'none' && 'filter' in targetCtx) (targetCtx as any).filter = filterStr;
+
     try {
       if (c.fit === 'contain') {
         bgc.width = W > H ? 64 : 36;
@@ -788,6 +1012,14 @@ export function initStudio() {
       }
     } catch (e) {}
     targetCtx.restore();
+
+    // Lớp phủ nghệ thuật (Overlay)
+    if (c.overlay && c.overlay !== 'none') {
+      targetCtx.save();
+      targetCtx.globalAlpha = o.alpha == null ? 1 : o.alpha;
+      drawClipOverlay(targetCtx, c.overlay, W, H);
+      targetCtx.restore();
+    }
   }
 
   function renderTransition(trType: string, prev: Clip, c: Clip, local: number, trd: number, clipIndex = 0) {
@@ -2997,6 +3229,31 @@ export function initStudio() {
 
   function updateTapStageUI() {
     const hasAudio = A.loaded && S.audioBlocks.length > 0;
+    const hasLyrics = S.lyr.length > 0;
+
+    // Cập nhật cảnh báo thiếu điều kiện cho Căn giờ AI
+    const aiNotice = $('#aiMissingNotice');
+    const aiNoticeTxt = $('#aiMissingText');
+    const btnRunAi = $('#btnRunAiSync') as HTMLButtonElement | null;
+    if (aiNotice && aiNoticeTxt) {
+      if (!hasAudio && !hasLyrics) {
+        aiNotice.style.display = 'block';
+        aiNoticeTxt.textContent = 'Vui lòng thêm file nhạc và nhập lời ở Bước 1 trước khi căn tự động.';
+        if (btnRunAi) btnRunAi.disabled = true;
+      } else if (!hasAudio) {
+        aiNotice.style.display = 'block';
+        aiNoticeTxt.textContent = 'Vui lòng thêm file nhạc vào timeline trước khi căn tự động.';
+        if (btnRunAi) btnRunAi.disabled = true;
+      } else if (!hasLyrics) {
+        aiNotice.style.display = 'block';
+        aiNoticeTxt.textContent = 'Vui lòng nhập lời bài hát ở Bước 1 trước khi căn tự động.';
+        if (btnRunAi) btnRunAi.disabled = true;
+      } else {
+        aiNotice.style.display = 'none';
+        if (btnRunAi) btnRunAi.disabled = false;
+      }
+    }
+
     const noAudioNotice = $('#lyrNoAudioNotice');
     const tapContainer = $('#lyrTapContainer');
     if (noAudioNotice && tapContainer) {
@@ -3354,6 +3611,370 @@ export function initStudio() {
     });
   }
 
+  /* =========================================================================
+     CĂN GIỜ TỰ ĐỘNG BẰNG AI (IN-BROWSER CLIENT-SIDE WHISPER PIPELINE)
+     ========================================================================= */
+  let aiWorker: Worker | null = null;
+  let isAiSyncRunning = false;
+  interface AiRecognizedWordItem {
+    text: string;
+    start: number;
+    end: number;
+  }
+  let aiRecognizedWords: AiRecognizedWordItem[] = [];
+  let aiWordsTraySearchQuery = '';
+  let isAiWordsTrayCollapsed = false;
+
+  try {
+    const cachedWords = sessionStorage.getItem('lvs_ai_words');
+    if (cachedWords) {
+      aiRecognizedWords = JSON.parse(cachedWords);
+    }
+  } catch (e) {}
+
+  function terminateAiWorker() {
+    if (aiWorker) {
+      try { aiWorker.terminate(); } catch (e) {}
+      aiWorker = null;
+    }
+    isAiSyncRunning = false;
+  }
+
+  async function startAiAutoSync() {
+    if (isAiSyncRunning) return;
+
+    if (!S.lyr.length) {
+      toast('Chưa có danh sách câu hát. Hãy nhập lời ở Bước 1 trước.');
+      switchLyricStep(1);
+      return;
+    }
+    if (!A.loaded || !S.audioBlocks.length) {
+      toast('Chưa có nhạc trên timeline. Hãy thêm file nhạc trước.');
+      return;
+    }
+
+    const optPane = $('#aiOptionsPane');
+    const progPane = $('#aiProgressPane');
+    const resPane = $('#aiResultPane');
+    const statusMsg = $('#aiProgressStatusMsg');
+    const progBar = $('#aiProgressBar');
+    const progPct = $('#aiProgressPercent');
+    const devNotice = $('#aiDeviceNotice');
+    const hwBadge = $('#aiHardwareBadge');
+
+    if (optPane) optPane.style.display = 'none';
+    if (progPane) progPane.style.display = 'flex';
+    if (resPane) resPane.style.display = 'none';
+
+    if (statusMsg) statusMsg.textContent = 'Đang trích xuất âm thanh từ timeline...';
+    if (progBar) progBar.style.width = '5%';
+    if (progPct) progPct.textContent = '5%';
+    if (devNotice) devNotice.textContent = 'Đang phân tích định dạng âm thanh...';
+
+    isAiSyncRunning = true;
+
+    try {
+      const audioRes = await getTimelineAudioData16kHz();
+      if (!audioRes) {
+        throw new Error('Không thể đọc dữ liệu âm thanh của timeline.');
+      }
+
+      const { audioData, timelineOffsetSec, totalSec } = audioRes;
+
+      const modelKey = ($('#selAiQuality') as HTMLSelectElement)?.value as 'tiny' | 'base' | 'small' || 'base';
+      const language = ($('#selAiLang') as HTMLSelectElement)?.value || 'vi';
+      const scope = ($('#selAiScope') as HTMLSelectElement)?.value || 'all';
+
+      terminateAiWorker();
+      aiWorker = new Worker(new URL('./whisperWorker.ts', import.meta.url), { type: 'module' });
+
+      aiWorker.onmessage = (e: MessageEvent) => {
+        const data = e.data;
+        if (!data) return;
+
+        if (data.type === 'device_info') {
+          const hasWebGPU = data.hasWebGPU;
+          const sizeTxt = data.modelSize || '';
+          if (hwBadge) {
+            hwBadge.textContent = hasWebGPU ? '⚡ WebGPU Tăng tốc' : '⚠️ WASM (CPU)';
+            hwBadge.style.color = hasWebGPU ? '#34d399' : '#f59e0b';
+            hwBadge.style.borderColor = hasWebGPU ? 'rgba(52, 211, 153, 0.4)' : 'rgba(245, 158, 11, 0.4)';
+          }
+          if (devNotice) {
+            devNotice.textContent = hasWebGPU
+              ? `Phần cứng: WebGPU sẵn sàng (${sizeTxt})`
+              : `Máy chạy chế độ CPU (WASM) - máy chạy chậm hơn, vui lòng đợi... (${sizeTxt})`;
+          }
+        } else if (data.type === 'download_progress') {
+          const pct = data.progress || 0;
+          if (statusMsg) statusMsg.textContent = `Đang tải model Whisper (${pct}%)...`;
+          const barW = Math.min(45, Math.round(pct * 0.45));
+          if (progBar) progBar.style.width = barW + '%';
+          if (progPct) progPct.textContent = barW + '%';
+        } else if (data.type === 'status') {
+          if (data.status === 'transcribing') {
+            const pct = data.progress || 0;
+            if (statusMsg) statusMsg.textContent = `Đang nghe nhạc ${pct}%...`;
+            const barW = 45 + Math.min(50, Math.round(pct * 0.5));
+            if (progBar) progBar.style.width = barW + '%';
+            if (progPct) progPct.textContent = barW + '%';
+          } else if (data.status === 'done') {
+            if (statusMsg) statusMsg.textContent = 'Đang đối khớp lời bài hát...';
+            if (progBar) progBar.style.width = '96%';
+            if (progPct) progPct.textContent = '96%';
+          }
+        } else if (data.type === 'transcribe_complete') {
+          isAiSyncRunning = false;
+          terminateAiWorker();
+
+          const recWords = data.words || [];
+          aiRecognizedWords = recWords.map((w: any) => ({
+            text: w.text,
+            start: parseFloat((w.start + timelineOffsetSec).toFixed(2)),
+            end: parseFloat((w.end + timelineOffsetSec).toFixed(2))
+          }));
+          try {
+            sessionStorage.setItem('lvs_ai_words', JSON.stringify(aiRecognizedWords));
+          } catch (e) {}
+          renderAiWordTray();
+
+          pushLyricHistory();
+
+          const alignRes = alignLyricsWithWhisper(
+            S.lyr.map(l => ({ id: l.id, text: l.text, t: l.t, endT: l.endT, lane: l.lane })),
+            recWords,
+            {
+              audioTimelineOffsetSec: timelineOffsetSec,
+              onlyUnsynced: scope === 'unsynced',
+              maxAudioSec: totalSec + timelineOffsetSec
+            }
+          );
+
+          // Cập nhật lại S.lyr
+          const newLyrMap = new Map(alignRes.lines.map(l => [l.id, l]));
+          S.lyr.forEach(item => {
+            const matched = newLyrMap.get(item.id);
+            if (matched) {
+              item.t = matched.t;
+              item.endT = matched.endT;
+              item.lane = matched.lane;
+              item.needsReview = matched.needsReview;
+              item.confidence = matched.confidence;
+            }
+          });
+
+          normalizeLyricLanes();
+          syncLyrToEditor(false);
+          renderTimeline();
+
+          if (progPane) progPane.style.display = 'none';
+          if (resPane) resPane.style.display = 'flex';
+
+          const resSummary = $('#aiResultSummary');
+          if (resSummary) {
+            resSummary.innerHTML = `
+              <div>🎯 <strong>Đã căn ${alignRes.confidentLines}/${alignRes.totalLines} câu</strong> (${alignRes.reviewLines} câu cần kiểm tra)</div>
+              <div style="font-size:10.5px;color:var(--muted);margin-top:2px;">
+                Độ tin cậy trung bình: ${(alignRes.averageConfidence * 100).toFixed(0)}% • Đã đánh dấu viền cam trên timeline.
+              </div>
+            `;
+          }
+
+          const firstReview = S.lyr.find(l => l.needsReview) || S.lyr[0];
+          if (firstReview) {
+            selectLyrBlock(firstReview.id);
+            seek(firstReview.t);
+          }
+
+          switchLyricStep(3);
+          toast(`✨ Căn giờ AI hoàn tất (${alignRes.confidentLines}/${alignRes.totalLines} câu)! Đã chuyển sang Bước 3.`);
+        } else if (data.type === 'cancelled') {
+          isAiSyncRunning = false;
+          terminateAiWorker();
+          if (progPane) progPane.style.display = 'none';
+          if (optPane) optPane.style.display = 'grid';
+          toast('Đã hủy căn giờ AI.');
+        } else if (data.type === 'error') {
+          isAiSyncRunning = false;
+          terminateAiWorker();
+          if (progPane) progPane.style.display = 'none';
+          if (optPane) optPane.style.display = 'grid';
+          toast('Lỗi nhận dạng AI: ' + (data.error || 'Không xác định'));
+        }
+      };
+
+      aiWorker.onerror = (err) => {
+        console.error('[AI Worker Error]', err);
+        isAiSyncRunning = false;
+        terminateAiWorker();
+        if (progPane) progPane.style.display = 'none';
+        if (optPane) optPane.style.display = 'grid';
+        toast('Lỗi chạy tiến trình nhận dạng AI: ' + (err.message || 'Lỗi'));
+      };
+
+      aiWorker.postMessage({
+        type: 'start',
+        audioData,
+        modelKey,
+        language
+      });
+
+    } catch (err: any) {
+      console.error('[AI Sync Error]', err);
+      isAiSyncRunning = false;
+      terminateAiWorker();
+      if (progPane) progPane.style.display = 'none';
+      if (optPane) optPane.style.display = 'grid';
+      toast('Không thể khởi chạy AI: ' + (err?.message || err));
+    }
+  }
+
+  /* Bước 3: Bảng điều khiển từ nhận dạng AI (Drag & Drop để khớp thủ công) */
+  function renderAiWordTray() {
+    const box = $('#aiWordsTrayBox');
+    const container = $('#aiWordsChipsContainer');
+    const countBadge = $('#aiWordsCountBadge');
+    if (!box || !container) return;
+
+    if (countBadge) countBadge.textContent = `${aiRecognizedWords.length} từ`;
+
+    if (!aiRecognizedWords.length) {
+      container.innerHTML = `
+        <div class="ai-words-empty-notice" id="aiWordsEmptyNotice">
+          <span>Chưa có từ AI nào. Bấm </span>
+          <button type="button" class="btn sm pri" id="btnGoToAiSyncFromTray" style="padding:1px 6px;font-size:10.5px;margin:0 4px;">
+            ⚡ Căn giờ AI (Bước 2)
+          </button>
+          <span> để nhận dạng giọng hát bài này.</span>
+        </div>
+      `;
+      const goBtn = $('#btnGoToAiSyncFromTray');
+      if (goBtn) goBtn.onclick = () => switchLyricStep(2);
+      return;
+    }
+
+    const query = aiWordsTraySearchQuery.trim();
+    const queryNorm = removeVietnameseTones(query.toLowerCase());
+
+    const filtered = aiRecognizedWords.map((w, idx) => ({ ...w, originalIdx: idx })).filter(w => {
+      if (!query) return true;
+      const wNorm = removeVietnameseTones(w.text.toLowerCase());
+      return w.text.toLowerCase().includes(query.toLowerCase()) || wNorm.includes(queryNorm);
+    });
+
+    if (!filtered.length) {
+      container.innerHTML = `<div style="padding:10px;text-align:center;color:var(--muted);font-size:11px;width:100%;">Không tìm thấy từ nào khớp với "${esc(query)}"</div>`;
+      return;
+    }
+
+    let html = '';
+    filtered.forEach(w => {
+      const isActive = S.t >= w.start && S.t <= w.end;
+      html += `
+        <div class="ai-word-chip ${isActive ? 'active-playhead' : ''}" 
+             draggable="true" 
+             id="ai-chip-${w.originalIdx}"
+             data-idx="${w.originalIdx}" 
+             data-start="${w.start}" 
+             data-end="${w.end}" 
+             data-word="${esc(w.text)}"
+             title="Kéo thả vào câu để gán mốc giờ. Bấm để nghe thử (${fmt(w.start)})">
+          <span class="ai-word-text">${esc(w.text)}</span>
+          <span class="ai-word-time">${fmt(w.start)}</span>
+        </div>
+      `;
+    });
+
+    container.innerHTML = html;
+
+    // Gắn sự kiện kéo thả và nghe thử cho từng chip
+    const chips = container.querySelectorAll('.ai-word-chip');
+    chips.forEach((chip: any) => {
+      const el = chip as HTMLElement;
+      const startT = +(el.dataset.start || 0);
+      const endT = +(el.dataset.end || 0);
+      const wordTxt = el.dataset.word || '';
+
+      el.addEventListener('dragstart', (e: DragEvent) => {
+        el.classList.add('dragging');
+        const payload = {
+          text: wordTxt,
+          start: startT,
+          end: endT,
+          type: 'ai-word'
+        };
+        if (e.dataTransfer) {
+          e.dataTransfer.setData('application/json', JSON.stringify(payload));
+          e.dataTransfer.setData('text/plain', `${wordTxt} (${fmt(startT)})`);
+          e.dataTransfer.effectAllowed = 'copyMove';
+        }
+      });
+
+      el.addEventListener('dragend', () => {
+        el.classList.remove('dragging');
+        document.querySelectorAll('.drop-target-active').forEach(target => target.classList.remove('drop-target-active'));
+      });
+
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        previewWordAudio(startT, endT);
+      });
+
+      el.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        if (S.selLyrId != null) {
+          const item = S.lyr.find(l => l.id === S.selLyrId);
+          if (item) {
+            pushLyricHistory();
+            item.t = parseFloat(startT.toFixed(2));
+            if (item.endT <= item.t) item.endT = parseFloat((endT + 0.3).toFixed(2));
+            item.needsReview = false;
+            syncLyrToEditor(false);
+            renderTimeline();
+            renderLyricCards();
+            toast(`Đã gán từ "${wordTxt}" (${fmt(startT)}) vào câu đang chọn!`);
+          }
+        }
+      });
+    });
+  }
+
+  function previewWordAudio(startSec: number, endSec: number) {
+    if (replayTimeout) {
+      clearTimeout(replayTimeout);
+      replayTimeout = null;
+    }
+    stopAllPreviews();
+    const leadIn = Math.max(0, startSec - 0.2);
+    const stopAt = endSec + 0.4;
+    seek(leadIn);
+    resumeAudioContext('Nghe thử từ AI').then(() => {
+      play();
+      const checkWordEnd = () => {
+        if (!S.playing) return;
+        if (S.t >= stopAt) {
+          pause();
+        } else {
+          replayTimeout = setTimeout(checkWordEnd, 30);
+        }
+      };
+      replayTimeout = setTimeout(checkWordEnd, 30);
+    });
+  }
+
+  function updateAiWordsActive(currentSec: number) {
+    if (currentLyrStep !== 3 || !aiRecognizedWords.length) return;
+    const container = document.getElementById('aiWordsChipsContainer');
+    if (!container) return;
+    const chips = container.querySelectorAll('.ai-word-chip');
+    chips.forEach((chip: any) => {
+      const start = +(chip.getAttribute('data-start') || 0);
+      const end = +(chip.getAttribute('data-end') || 0);
+      const isActive = currentSec >= start && currentSec <= end;
+      chip.classList.toggle('active-playhead', isActive);
+    });
+  }
+
   /* Bước 3: Render danh sách thẻ cuộn chỉnh sửa từng câu */
   function renderLyricCards() {
     const listEl = $('#lyrCardsList');
@@ -3370,12 +3991,13 @@ export function initStudio() {
     S.lyr.forEach((ly, i) => {
       const isSel = ly.id === S.selLyrId;
       const dur = Math.max(0, (ly.endT || ly.t + 3) - ly.t);
+      const isReview = !!ly.needsReview;
       html += `
-        <div class="lyr-card ${isSel ? 'selected' : ''}" id="card-lyr-${ly.id}" data-id="${ly.id}" data-idx="${i}">
+        <div class="lyr-card ${isSel ? 'selected' : ''} ${isReview ? 'needs-review' : ''}" id="card-lyr-${ly.id}" data-id="${ly.id}" data-idx="${i}">
           <div class="lyr-card-header">
             <div style="display:flex;align-items:center;gap:6px;">
-              <span class="badge ${isSel ? 'warn' : 'neutral'}" style="font-size:10.5px;padding:1px 6px;">#${i + 1}</span>
-              <button class="btn sm" data-action="play" data-idx="${i}" type="button" title="Nghe thử câu này từ ${fmt(ly.t)}" style="padding:2px 7px;font-size:11px;">▶</button>
+              <span class="badge ${isSel ? 'warn' : isReview ? 'warn' : 'neutral'}" style="font-size:10.5px;padding:1px 6px;">#${i + 1}</span>
+              <button class="btn sm" data-action="play" data-idx="${i}" type="button" title="Nghe thử câu này từ ${fmt(ly.t)}" style="padding:2px 7px;font-size:11px;">▶ Nghe lại</button>
             </div>
             <div class="lyr-card-time-group">
               <span style="color:var(--muted);font-size:10.5px;">Từ:</span>
@@ -3435,21 +4057,20 @@ export function initStudio() {
     if (action === 'play') {
       e.stopPropagation();
       stopAllPreviews();
-      seek(item.t);
       selectLyrBlock(item.id);
-      resumeAudioContext('Nghe thử câu').then(() => {
-        if (!S.playing) play();
-      });
+      replaySentence(item);
     } else if (action === 'nudge-minus') {
       e.stopPropagation();
       pushLyricHistory();
       item.t = Math.max(0, parseFloat((item.t - 0.1).toFixed(2)));
+      item.needsReview = false;
       syncLyrToEditor(false);
       toast(`Câu #${idx + 1}: ${fmt(item.t)} (-0.1s)`);
     } else if (action === 'nudge-plus') {
       e.stopPropagation();
       pushLyricHistory();
       item.t = parseFloat((item.t + 0.1).toFixed(2));
+      item.needsReview = false;
       syncLyrToEditor(false);
       toast(`Câu #${idx + 1}: ${fmt(item.t)} (+0.1s)`);
     } else if (action === 'split') {
@@ -3485,6 +4106,7 @@ export function initStudio() {
       if (t != null && t >= 0) {
         pushLyricHistory();
         item.t = parseFloat(t.toFixed(2));
+        item.needsReview = false;
         S.lyr.sort((a, b) => a.t - b.t);
         syncLyrToEditor(false);
       } else {
@@ -3495,6 +4117,7 @@ export function initStudio() {
       if (endT != null && endT > item.t) {
         pushLyricHistory();
         item.endT = parseFloat(endT.toFixed(2));
+        item.needsReview = false;
         syncLyrToEditor(false);
       } else {
         target.value = fmt(item.endT || item.t + 3);
@@ -3671,13 +4294,17 @@ export function initStudio() {
     } else if (step === 2) {
       updateTapStageUI();
     } else if (step === 3) {
+      renderAiWordTray();
       renderLyricCards();
     }
   }
 
   function renderLyricUI() {
     if (currentLyrStep === 2) updateTapStageUI();
-    else if (currentLyrStep === 3) renderLyricCards();
+    else if (currentLyrStep === 3) {
+      renderAiWordTray();
+      renderLyricCards();
+    }
     const rawEl = $('#lyrRawInput') as HTMLTextAreaElement | null;
     if (rawEl && !rawEl.matches(':focus')) {
       rawEl.value = rawLyricLines().join('\n');
@@ -4417,6 +5044,51 @@ export function initStudio() {
     }
   }
 
+  /* Trích xuất âm thanh mono 16kHz chuẩn cho Whisper AI nhận dạng */
+  async function getTimelineAudioData16kHz(): Promise<{
+    audioData: Float32Array;
+    timelineOffsetSec: number;
+    totalSec: number;
+  } | null> {
+    const buf = await getDecodedAudioBuffer();
+    if (!buf) return null;
+
+    const blocks = S.audioBlocks.length > 0 ? S.audioBlocks : [{
+      id: 1,
+      start: 0,
+      srcIn: A.start || 0,
+      srcOut: (A.end && A.end > A.start) ? A.end : buf.duration,
+      dur: ((A.end && A.end > A.start) ? A.end : buf.duration) - (A.start || 0)
+    }];
+
+    const sorted = [...blocks].sort((a, b) => a.start - b.start);
+    const firstBlock = sorted[0];
+    const lastBlock = sorted[sorted.length - 1];
+    const timelineOffsetSec = firstBlock.start;
+    const totalTimelineDuration = Math.max(0.5, (lastBlock.start + lastBlock.dur) - firstBlock.start);
+
+    const targetSampleRate = 16000;
+    const totalTargetFrames = Math.max(1, Math.ceil(totalTimelineDuration * targetSampleRate));
+    const offlineCtx = new OfflineAudioContext(1, totalTargetFrames, targetSampleRate);
+
+    sorted.forEach(b => {
+      const src = offlineCtx.createBufferSource();
+      src.buffer = buf;
+      const destOffset = Math.max(0, b.start - timelineOffsetSec);
+      const validDur = Math.max(0.1, Math.min(b.dur, buf.duration - b.srcIn));
+      src.connect(offlineCtx.destination);
+      src.start(destOffset, b.srcIn, validDur);
+    });
+
+    const renderedBuffer = await offlineCtx.startRendering();
+    const monoChannel = renderedBuffer.getChannelData(0);
+    return {
+      audioData: monoChannel,
+      timelineOffsetSec,
+      totalSec: totalTimelineDuration
+    };
+  }
+
   async function exportTrimmedAudio(format: 'wav' | 'mp3' = 'wav') {
     if (!A.loaded && !A.file && !A.url && !A.el.src) {
       return toast('Chưa có nhạc. Vui lòng chọn file nhạc trước.');
@@ -4672,6 +5344,7 @@ export function initStudio() {
     updateUI();
     updateActiveLyricCard(S.t);
     if (currentLyrStep === 2) renderMiniWaveform();
+    if (currentLyrStep === 3) updateAiWordsActive(S.t);
     raf = requestAnimationFrame(tick);
   }
   /* ---------- toàn màn hình preview helpers ---------- */
@@ -4804,6 +5477,7 @@ export function initStudio() {
     updateUI();
     updateActiveLyricCard(S.t);
     if (currentLyrStep === 2) renderMiniWaveform();
+    if (currentLyrStep === 3) updateAiWordsActive(S.t);
   }
 
   function isAnyPreviewActive(): boolean {
@@ -4990,7 +5664,7 @@ export function initStudio() {
     if (rulerEl) rulerEl.innerHTML = r;
     let a = 0, h = '';
     S.clips.forEach((c, i) => {
-      const isSel = c.id === S.sel;
+      const isSel = c.id === S.sel || (S.selectedClipIds && S.selectedClipIds.includes(c.id));
       const w = Math.max(16, c.dur * pps - 2);
       const prev = i > 0 ? S.clips[i - 1] : null;
       const maxTrd = prev ? Math.max(0.1, Math.min(3.0, prev.dur * 0.5, c.dur * 0.5)) : 0;
@@ -5203,7 +5877,7 @@ export function initStudio() {
         const lane = typeof ly.lane === 'number' ? clamp(ly.lane, 0, 3) : 0;
         const topPx = lane * lyrLaneH + 2;
 
-        l += '<div class="lyr-block' + (isSel ? ' sel' : '') + (isJustDropped ? ' lyr-just-dropped' : '') + '" data-lid="' + ly.id + '" style="left:' + (ly.t * pps) + 'px;top:' + topPx + 'px;width:' + w + 'px" title="' + esc(ly.text) + ' [' + fmt(ly.t) + ' ➔ ' + fmt(endT) + ' - Hàng ' + (lane + 1) + ']">'
+        l += '<div class="lyr-block' + (isSel ? ' sel' : '') + (isJustDropped ? ' lyr-just-dropped' : '') + (ly.needsReview ? ' needs-review' : '') + '" data-lid="' + ly.id + '" style="left:' + (ly.t * pps) + 'px;top:' + topPx + 'px;width:' + w + 'px" title="' + esc(ly.text) + (ly.needsReview ? ' [⚠️ Cần kiểm tra]' : '') + ' [' + fmt(ly.t) + ' ➔ ' + fmt(endT) + ' - Hàng ' + (lane + 1) + ']">'
           + '<span class="lyr-handle left" data-lid="' + ly.id + '" data-handle="left" title="Kéo mép trái để đổi giờ bắt đầu"></span>'
           + '<span class="lyr-idx">#' + (i + 1) + '</span>'
           + '<span class="lyr-txt">' + esc(ly.text || '(trống)') + '</span>'
@@ -5299,6 +5973,36 @@ export function initStudio() {
       const rFit = $('#rFit') as HTMLSelectElement | null;
       if (rFit) rFit.value = c.fit;
 
+      // Cập nhật các trường chỉnh ảnh nâng cao cho Inspector
+      const iPhotoGroup = $('#iPhotoFxGroup');
+      if (iPhotoGroup) iPhotoGroup.style.display = v ? 'none' : 'block';
+
+      const iBr = $('#iBrightness') as HTMLInputElement | null;
+      if (iBr && !iBr.matches(':focus')) iBr.value = String(c.brightness ?? 1.0);
+      const iBrVal = $('#iBrightnessVal');
+      if (iBrVal) iBrVal.textContent = Math.round((c.brightness ?? 1.0) * 100) + '%';
+
+      const iCt = $('#iContrast') as HTMLInputElement | null;
+      if (iCt && !iCt.matches(':focus')) iCt.value = String(c.contrast ?? 1.0);
+      const iCtVal = $('#iContrastVal');
+      if (iCtVal) iCtVal.textContent = Math.round((c.contrast ?? 1.0) * 100) + '%';
+
+      const iSat = $('#iSaturate') as HTMLInputElement | null;
+      if (iSat && !iSat.matches(':focus')) iSat.value = String(c.saturate ?? 1.0);
+      const iSatVal = $('#iSaturateVal');
+      if (iSatVal) iSatVal.textContent = Math.round((c.saturate ?? 1.0) * 100) + '%';
+
+      const iTemp = $('#iTemperature') as HTMLInputElement | null;
+      if (iTemp && !iTemp.matches(':focus')) iTemp.value = String(c.temperature ?? 0);
+      const iTempVal = $('#iTempVal');
+      if (iTempVal) {
+        const val = c.temperature ?? 0;
+        iTempVal.textContent = val === 0 ? '0 (Chuẩn)' : val > 0 ? `+${val} (Ấm ☀️)` : `${val} (Lạnh ❄️)`;
+      }
+
+      const iOv = $('#iOverlay') as HTMLSelectElement | null;
+      if (iOv) iOv.value = c.overlay || 'none';
+
     } else if (ab) {
       if (ctxClip) ctxClip.hidden = true;
       if (ctxAudio) ctxAudio.hidden = false;
@@ -5383,6 +6087,93 @@ export function initStudio() {
     document.querySelectorAll('.speed-btn').forEach(btn => {
       btn.classList.toggle('active', Math.abs(parseFloat((btn as any).dataset.speed || '1') - (S.speed || 1)) < 0.01);
     });
+
+    syncMediaTabClipEditor();
+  }
+
+  function getActiveImageClip(): Clip | null {
+    if (S.sel) {
+      const c = selClip();
+      if (c && c.type === 'image') return c;
+    }
+    const imgs = S.clips.filter(c => c.type === 'image');
+    return imgs.length > 0 ? imgs[0] : null;
+  }
+
+  function syncMediaTabClipEditor() {
+    const box = $('#mediaPhotoFxBox');
+    if (!box) return;
+
+    const imageClips = S.clips.filter(c => c.type === 'image');
+    const selEl = $('#selMediaActiveClip') as HTMLSelectElement | null;
+    const badge = $('#mediaClipBadge');
+
+    if (!imageClips.length) {
+      if (selEl) selEl.innerHTML = '<option value="">(Chưa có clip ảnh nào)</option>';
+      if (badge) badge.textContent = 'Chưa có ảnh';
+      return;
+    }
+
+    const activeImg = getActiveImageClip() || imageClips[0];
+
+    // Cập nhật danh sách dropdown clip ảnh
+    if (selEl) {
+      let opts = '';
+      imageClips.forEach(c => {
+        const idx = S.clips.findIndex(x => x.id === c.id) + 1;
+        const isSel = c.id === activeImg.id;
+        opts += `<option value="${c.id}" ${isSel ? 'selected' : ''}>#${idx}: ${esc(c.name)} (${c.dur.toFixed(1)}s)</option>`;
+      });
+      selEl.innerHTML = opts;
+    }
+
+    if (badge) {
+      const idx = S.clips.findIndex(x => x.id === activeImg.id) + 1;
+      badge.textContent = `Ảnh #${idx}`;
+    }
+
+    // Chuyển động Ken Burns
+    const mFx = $('#mClipFx') as HTMLSelectElement | null;
+    if (mFx) mFx.value = activeImg.fx || 'none';
+
+    document.querySelectorAll('.ken-burns-quick-grid .ken-btn').forEach((btn: any) => {
+      btn.classList.toggle('active', btn.dataset.fx === (activeImg.fx || 'none'));
+    });
+
+    // Độ sáng
+    const mBr = $('#mBrightness') as HTMLInputElement | null;
+    if (mBr && !mBr.matches(':focus')) mBr.value = String(activeImg.brightness ?? 1.0);
+    const mBrVal = $('#mBrightnessVal');
+    if (mBrVal) mBrVal.textContent = Math.round((activeImg.brightness ?? 1.0) * 100) + '%';
+
+    // Độ tương phản
+    const mCt = $('#mContrast') as HTMLInputElement | null;
+    if (mCt && !mCt.matches(':focus')) mCt.value = String(activeImg.contrast ?? 1.0);
+    const mCtVal = $('#mContrastVal');
+    if (mCtVal) mCtVal.textContent = Math.round((activeImg.contrast ?? 1.0) * 100) + '%';
+
+    // Bão hòa màu sắc
+    const mSat = $('#mSaturate') as HTMLInputElement | null;
+    if (mSat && !mSat.matches(':focus')) mSat.value = String(activeImg.saturate ?? 1.0);
+    const mSatVal = $('#mSaturateVal');
+    if (mSatVal) mSatVal.textContent = Math.round((activeImg.saturate ?? 1.0) * 100) + '%';
+
+    // Nhiệt độ màu
+    const mTemp = $('#mTemperature') as HTMLInputElement | null;
+    if (mTemp && !mTemp.matches(':focus')) mTemp.value = String(activeImg.temperature ?? 0);
+    const mTempVal = $('#mTempVal');
+    if (mTempVal) {
+      const val = activeImg.temperature ?? 0;
+      mTempVal.textContent = val === 0 ? '0 (Chuẩn)' : val > 0 ? `+${val} (Ấm ☀️)` : `${val} (Lạnh ❄️)`;
+    }
+
+    // Lớp phủ
+    const mOv = $('#mOverlay') as HTMLSelectElement | null;
+    if (mOv) mOv.value = activeImg.overlay || 'none';
+
+    // Bộ lọc màu
+    const mCol = $('#mColorFilter') as HTMLSelectElement | null;
+    if (mCol) mCol.value = activeImg.color || 'none';
   }
 
   function renderMediaDrawerCards() {
@@ -5395,6 +6186,20 @@ export function initStudio() {
     let html = '';
     S.mediaList.forEach((m) => {
       const isAssociated = S.clips.some(c => c.mediaId === m.id && c.id === S.sel);
+      let fxBadges = '';
+      if (m.type === 'image') {
+        const associated = S.clips.find(c => c.mediaId === m.id);
+        if (associated) {
+          const fxIcon = FX_ICONS[associated.fx] || '✨';
+          const fxName = FX[associated.fx] || associated.fx;
+          fxBadges = '<div class="media-fx-tags">'
+            + (associated.fx && associated.fx !== 'none' ? `<span class="media-fx-tag">${fxIcon} ${esc(fxName)}</span>` : '')
+            + (associated.temperature && associated.temperature !== 0 ? `<span class="media-fx-tag">${associated.temperature > 0 ? '☀️ Ấm' : '❄️ Lạnh'}</span>` : '')
+            + (associated.overlay && associated.overlay !== 'none' ? `<span class="media-fx-tag">🎬 Lớp phủ</span>` : '')
+            + '</div>';
+        }
+      }
+
       html += '<div class="media-drawer-card ' + (isAssociated ? 'selected' : '') + '" data-mid="' + m.id + '" title="' + esc(m.name) + '">'
         + '<div class="media-drawer-thumb-wrap">'
         + '<img src="' + (m.thumb || m.url) + '" alt="' + esc(m.name) + '" class="media-drawer-thumb" />'
@@ -5403,6 +6208,7 @@ export function initStudio() {
         + '<div class="media-drawer-info">'
         + '<span class="media-drawer-title" title="' + esc(m.name) + '">' + esc(m.name) + '</span>'
         + '<span class="media-drawer-meta">' + (m.type === 'video' ? m.full.toFixed(1) + 's' : 'Ảnh') + '</span>'
+        + fxBadges
         + '</div>'
         + '<button type="button" class="media-drawer-add-btn" data-add-mid="' + m.id + '" title="Thêm vào timeline">+</button>'
         + '</div>';
@@ -6686,7 +7492,15 @@ export function initStudio() {
   }
 
   function bind() {
-    fill('#defFx', FX); fillGrouped('#defTr', TR_GROUPS); fill('#iFx', FX); fillGrouped('#iTr', TR_GROUPS); fill('#iCol', COL);
+    fillGrouped('#defFx', FX_GROUPS);
+    fillGrouped('#defTr', TR_GROUPS);
+    fillGrouped('#iFx', FX_GROUPS);
+    fillGrouped('#iTr', TR_GROUPS);
+    fill('#iCol', COL);
+    fillGrouped('#mClipFx', FX_GROUPS);
+    fill('#mOverlay', OVERLAYS);
+    fill('#iOverlay', OVERLAYS);
+    fill('#mColorFilter', COL);
     const defFxEl = $('#defFx'); if (defFxEl) defFxEl.value = S.def.fx;
     const defTrEl = $('#defTr'); if (defTrEl) defTrEl.value = S.def.tr;
     const defTrDEl = $('#defTrD') as HTMLInputElement | null; if (defTrDEl) defTrDEl.value = String(S.def.trDur);
@@ -7602,7 +8416,34 @@ export function initStudio() {
       e.target.value = '';
     });
 
-    // Bước 2: Căn giờ (Chế độ Giữ / Bấm, Bù trễ, Playhead, Nghe lại)
+    // Bước 2: Căn giờ (AI Tự động + Chế độ Giữ / Bấm, Bù trễ, Playhead, Nghe lại)
+    safeClick('#btnRunAiSync', startAiAutoSync);
+    safeClick('#btnCancelAiSync', () => {
+      terminateAiWorker();
+      const progPane = $('#aiProgressPane');
+      const optPane = $('#aiOptionsPane');
+      if (progPane) progPane.style.display = 'none';
+      if (optPane) optPane.style.display = 'grid';
+      toast('Đã hủy căn giờ AI.');
+    });
+    safeClick('#btnAiDismissResult', () => {
+      const resPane = $('#aiResultPane');
+      const optPane = $('#aiOptionsPane');
+      if (resPane) resPane.style.display = 'none';
+      if (optPane) optPane.style.display = 'grid';
+    });
+    safeClick('#btnAiGoToStep3', () => switchLyricStep(3));
+    safeClick('#btnAiUpgradeQuality', () => {
+      const selQ = $('#selAiQuality') as HTMLSelectElement | null;
+      if (selQ) {
+        if (selQ.value === 'tiny') selQ.value = 'base';
+        else selQ.value = 'small';
+      }
+      const resPane = $('#aiResultPane');
+      if (resPane) resPane.style.display = 'none';
+      startAiAutoSync();
+    });
+
     safeClick('#btnStep2AddAudio', () => {
       const fi = $('#fileAudio') as HTMLInputElement | null;
       if (fi) fi.click();
@@ -7700,7 +8541,133 @@ export function initStudio() {
     if (cardsListEl) {
       cardsListEl.addEventListener('click', handleCardAction);
       cardsListEl.addEventListener('change', handleCardChange);
+
+      cardsListEl.addEventListener('dragover', (e: DragEvent) => {
+        const card = (e.target as HTMLElement).closest('.lyr-card') as HTMLElement | null;
+        if (!card) return;
+        const types = e.dataTransfer?.types;
+        if (types && (types.includes('application/json') || types.includes('text/plain'))) {
+          e.preventDefault();
+          if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+          const timeInput = (e.target as HTMLElement).closest('.lyr-card-time-input, .lyr-card-text-input') as HTMLElement | null;
+          cardsListEl.querySelectorAll('.drop-target-active').forEach((el: any) => {
+            if (el !== card && el !== timeInput) el.classList.remove('drop-target-active');
+          });
+          if (timeInput) {
+            timeInput.classList.add('drop-target-active');
+            card.classList.remove('drop-target-active');
+          } else {
+            card.classList.add('drop-target-active');
+          }
+        }
+      });
+
+      cardsListEl.addEventListener('dragleave', (e: DragEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.classList.contains('drop-target-active')) {
+          target.classList.remove('drop-target-active');
+        }
+      });
+
+      cardsListEl.addEventListener('drop', (e: DragEvent) => {
+        const card = (e.target as HTMLElement).closest('.lyr-card') as HTMLElement | null;
+        if (!card) return;
+        cardsListEl.querySelectorAll('.drop-target-active').forEach((el: any) => el.classList.remove('drop-target-active'));
+
+        const rawJson = e.dataTransfer?.getData('application/json');
+        if (!rawJson) return;
+        try {
+          const wordData = JSON.parse(rawJson);
+          if (wordData == null || typeof wordData.start !== 'number') return;
+          e.preventDefault();
+          e.stopPropagation();
+
+          const idx = +(card.dataset.idx || 0);
+          const item = S.lyr[idx];
+          if (!item) return;
+
+          pushLyricHistory();
+
+          const targetInput = (e.target as HTMLElement).closest('[data-action]') as HTMLElement | null;
+          const action = targetInput?.getAttribute('data-action');
+
+          if (action === 'start') {
+            item.t = parseFloat(wordData.start.toFixed(2));
+            if (item.endT <= item.t) item.endT = parseFloat(Math.max(item.t + 0.8, (wordData.end || item.t + 2.5)).toFixed(2));
+            toast(`Đã gán giờ BẮT ĐẦU câu #${idx + 1}: ${fmt(item.t)} (từ "${wordData.text}")`);
+          } else if (action === 'end') {
+            item.endT = parseFloat(Math.max(item.t + 0.3, wordData.end || wordData.start + 0.8).toFixed(2));
+            toast(`Đã gán giờ KẾT THÚC câu #${idx + 1}: ${fmt(item.endT)} (từ "${wordData.text}")`);
+          } else if (action === 'text') {
+            const input = targetInput as HTMLInputElement;
+            const curVal = input.value.trim();
+            input.value = curVal ? `${curVal} ${wordData.text}` : wordData.text;
+            item.text = input.value;
+            toast(`Đã ghép từ "${wordData.text}" vào câu #${idx + 1}`);
+          } else {
+            // Thả vào toàn bộ thẻ câu
+            item.t = parseFloat(wordData.start.toFixed(2));
+            const calculatedEnd = wordData.end && wordData.end > wordData.start ? wordData.end + 0.2 : item.t + 2.5;
+            item.endT = parseFloat(calculatedEnd.toFixed(2));
+            toast(`🎯 Khớp câu #${idx + 1}: ${fmt(item.t)} ➔ ${fmt(item.endT)} ("${wordData.text}")`);
+          }
+
+          item.needsReview = false;
+          syncLyrToEditor(false);
+          renderTimeline();
+          renderLyricCards();
+
+          // Flash hiệu ứng thành công
+          const updatedCard = document.getElementById(`card-lyr-${item.id}`);
+          if (updatedCard) {
+            updatedCard.classList.add('drop-success');
+            setTimeout(() => updatedCard.classList.remove('drop-success'), 750);
+          }
+        } catch (err) {
+          console.error('Lỗi khi thả từ AI:', err);
+        }
+      });
     }
+
+    safeClick('#btnToggleAiTray', () => {
+      const box = $('#aiWordsTrayBox');
+      const btn = $('#btnToggleAiTray');
+      if (!box || !btn) return;
+      isAiWordsTrayCollapsed = !isAiWordsTrayCollapsed;
+      box.classList.toggle('collapsed', isAiWordsTrayCollapsed);
+      btn.textContent = isAiWordsTrayCollapsed ? '▼ Mở rộng' : '▲ Thu gọn';
+    });
+
+    safeClick('#btnAiScrollToPlayhead', () => {
+      if (!aiRecognizedWords.length) {
+        toast('Chưa có từ nhận dạng AI.');
+        return;
+      }
+      let closestIdx = 0;
+      let minDiff = 999999;
+      aiRecognizedWords.forEach((w, idx) => {
+        const diff = Math.abs(w.start - S.t);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestIdx = idx;
+        }
+      });
+      const chipEl = document.getElementById(`ai-chip-${closestIdx}`);
+      if (chipEl) {
+        chipEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        chipEl.classList.add('active-playhead');
+        setTimeout(() => chipEl.classList.remove('active-playhead'), 1500);
+      }
+    });
+
+    safeInput('#aiWordsSearchInput', (e: any) => {
+      aiWordsTraySearchQuery = e.target.value || '';
+      renderAiWordTray();
+    });
+
+    safeClick('#btnGoToAiSyncFromTray', () => {
+      switchLyricStep(2);
+    });
 
     // chữ
     const st = S.style, redraw = () => draw();
@@ -8329,7 +9296,25 @@ export function initStudio() {
           fadeOut: A.fadeOut
         };
 
-        S.sel = clip.id;
+        if (e.shiftKey) {
+          const lastIdx = S.clips.findIndex(c => c.id === S.sel);
+          const start = Math.min(lastIdx >= 0 ? lastIdx : cIdx, cIdx);
+          const end = Math.max(lastIdx >= 0 ? lastIdx : cIdx, cIdx);
+          S.selectedClipIds = S.clips.slice(start, end + 1).map(c => c.id);
+        } else if (e.ctrlKey || e.metaKey) {
+          if (!S.selectedClipIds) S.selectedClipIds = [];
+          if (!S.selectedClipIds.includes(clip.id)) {
+            S.selectedClipIds.push(clip.id);
+          } else {
+            S.selectedClipIds = S.selectedClipIds.filter(id => id !== clip.id);
+          }
+          if (!S.selectedClipIds.includes(S.sel || 0)) {
+            S.sel = S.selectedClipIds[0] || null;
+          }
+        } else {
+          S.sel = clip.id;
+          S.selectedClipIds = [clip.id];
+        }
         S.selAudioId = null;
         S.selLyrId = null;
         S.activeTrack = 'clip';
@@ -8526,7 +9511,26 @@ export function initStudio() {
           } else {
             // Click chọn và dời đầu phát
             if (cDragClip) {
-              S.sel = cDragClip.id;
+              const clickedClip = cDragClip;
+              if (e.shiftKey) {
+                const lastIdx = S.clips.findIndex(c => c.id === S.sel);
+                const start = Math.min(lastIdx >= 0 ? lastIdx : cDragIdx, cDragIdx);
+                const end = Math.max(lastIdx >= 0 ? lastIdx : cDragIdx, cDragIdx);
+                S.selectedClipIds = S.clips.slice(start, end + 1).map(c => c.id);
+              } else if (e.ctrlKey || e.metaKey) {
+                if (!S.selectedClipIds) S.selectedClipIds = [];
+                if (!S.selectedClipIds.includes(clickedClip.id)) {
+                  S.selectedClipIds.push(clickedClip.id);
+                } else {
+                  S.selectedClipIds = S.selectedClipIds.filter(id => id !== clickedClip.id);
+                }
+                if (!S.selectedClipIds.includes(S.sel || 0)) {
+                  S.sel = S.selectedClipIds[0] || null;
+                }
+              } else {
+                S.sel = clickedClip.id;
+                S.selectedClipIds = [clickedClip.id];
+              }
               S.selAudioId = null;
               S.selLyrId = null;
               const tlEl = $('#tl');
@@ -9101,6 +10105,303 @@ export function initStudio() {
       toast('Đã nhân bản clip: ' + n.name);
     });
     safeClick('#tSplit', splitClipAtPlayhead);
+
+    // ----------------------------------------------------
+    // HIỆU ỨNG ẢNH, ÁNH SÁNG, MÀU SẮC, LỚP PHỦ & KEN BURNS
+    // ----------------------------------------------------
+    // Chuyển clip ảnh đang chọn trong Tab Media
+    safeChange('#selMediaActiveClip', (e: any) => {
+      const cid = +e.target.value;
+      if (!cid) return;
+      S.sel = cid;
+      S.selAudioId = null;
+      S.selLyrId = null;
+      S.activeTrack = 'clip';
+      refreshAll();
+      updateInspector();
+    });
+
+    safeClick('#btnMediaPrevClip', () => {
+      const imageClips = S.clips.filter(c => c.type === 'image');
+      if (imageClips.length <= 1) return;
+      const curIdx = imageClips.findIndex(c => c.id === S.sel);
+      const nextIdx = curIdx > 0 ? curIdx - 1 : imageClips.length - 1;
+      S.sel = imageClips[nextIdx].id;
+      S.selAudioId = null;
+      S.selLyrId = null;
+      S.activeTrack = 'clip';
+      refreshAll();
+      updateInspector();
+    });
+
+    safeClick('#btnMediaNextClip', () => {
+      const imageClips = S.clips.filter(c => c.type === 'image');
+      if (imageClips.length <= 1) return;
+      const curIdx = imageClips.findIndex(c => c.id === S.sel);
+      const nextIdx = curIdx >= 0 && curIdx < imageClips.length - 1 ? curIdx + 1 : 0;
+      S.sel = imageClips[nextIdx].id;
+      S.selAudioId = null;
+      S.selLyrId = null;
+      S.activeTrack = 'clip';
+      refreshAll();
+      updateInspector();
+    });
+
+    // Ken Burns dropdown trong Tab Media
+    safeChange('#mClipFx', (e: any) => {
+      const c = getActiveImageClip();
+      if (!c) return;
+      pushTimelineHistory();
+      c.fx = e.target.value;
+      refreshAll();
+      updateInspector();
+      toast('Đã đặt hiệu ứng: ' + (FX[c.fx] || c.fx));
+    });
+
+    // Nút chọn nhanh Ken Burns trong Tab Media
+    document.querySelectorAll('.ken-burns-quick-grid .ken-btn').forEach((btn: any) => {
+      btn.addEventListener('click', () => {
+        const c = getActiveImageClip();
+        if (!c) return;
+        const fxVal = btn.dataset.fx || 'none';
+        pushTimelineHistory();
+        c.fx = fxVal;
+        refreshAll();
+        updateInspector();
+        toast('Ken Burns: ' + (FX[fxVal] || fxVal));
+      });
+    });
+
+    // Độ sáng (Brightness) trong Tab Media & Inspector
+    const updateBrightness = (val: number) => {
+      const c = getActiveImageClip();
+      if (!c) return;
+      c.brightness = val;
+      const pct = Math.round(val * 100) + '%';
+      const mVal = $('#mBrightnessVal'), iVal = $('#iBrightnessVal');
+      if (mVal) mVal.textContent = pct;
+      if (iVal) iVal.textContent = pct;
+      const iBr = $('#iBrightness') as HTMLInputElement | null;
+      if (iBr && !iBr.matches(':focus')) iBr.value = String(val);
+      const mBr = $('#mBrightness') as HTMLInputElement | null;
+      if (mBr && !mBr.matches(':focus')) mBr.value = String(val);
+      draw();
+    };
+    safeInput('#mBrightness', (e: any) => updateBrightness(+e.target.value));
+    safeInput('#iBrightness', (e: any) => updateBrightness(+e.target.value));
+
+    // Độ tương phản (Contrast)
+    const updateContrast = (val: number) => {
+      const c = getActiveImageClip();
+      if (!c) return;
+      c.contrast = val;
+      const pct = Math.round(val * 100) + '%';
+      const mVal = $('#mContrastVal'), iVal = $('#iContrastVal');
+      if (mVal) mVal.textContent = pct;
+      if (iVal) iVal.textContent = pct;
+      const iCt = $('#iContrast') as HTMLInputElement | null;
+      if (iCt && !iCt.matches(':focus')) iCt.value = String(val);
+      const mCt = $('#mContrast') as HTMLInputElement | null;
+      if (mCt && !mCt.matches(':focus')) mCt.value = String(val);
+      draw();
+    };
+    safeInput('#mContrast', (e: any) => updateContrast(+e.target.value));
+    safeInput('#iContrast', (e: any) => updateContrast(+e.target.value));
+
+    // Bão hòa màu (Saturation)
+    const updateSaturate = (val: number) => {
+      const c = getActiveImageClip();
+      if (!c) return;
+      c.saturate = val;
+      const pct = Math.round(val * 100) + '%';
+      const mVal = $('#mSaturateVal'), iVal = $('#iSaturateVal');
+      if (mVal) mVal.textContent = pct;
+      if (iVal) iVal.textContent = pct;
+      const iSat = $('#iSaturate') as HTMLInputElement | null;
+      if (iSat && !iSat.matches(':focus')) iSat.value = String(val);
+      const mSat = $('#mSaturate') as HTMLInputElement | null;
+      if (mSat && !mSat.matches(':focus')) mSat.value = String(val);
+      draw();
+    };
+    safeInput('#mSaturate', (e: any) => updateSaturate(+e.target.value));
+    safeInput('#iSaturate', (e: any) => updateSaturate(+e.target.value));
+
+    // Nhiệt độ màu (Temperature: -50 đến +50)
+    const updateTemperature = (val: number) => {
+      const c = getActiveImageClip();
+      if (!c) return;
+      c.temperature = val;
+      const txt = val === 0 ? '0 (Chuẩn)' : val > 0 ? `+${val} (Ấm ☀️)` : `${val} (Lạnh ❄️)`;
+      const mVal = $('#mTempVal'), iVal = $('#iTempVal');
+      if (mVal) mVal.textContent = txt;
+      if (iVal) iVal.textContent = txt;
+      const iTemp = $('#iTemperature') as HTMLInputElement | null;
+      if (iTemp && !iTemp.matches(':focus')) iTemp.value = String(val);
+      const mTemp = $('#mTemperature') as HTMLInputElement | null;
+      if (mTemp && !mTemp.matches(':focus')) mTemp.value = String(val);
+      draw();
+    };
+    safeInput('#mTemperature', (e: any) => updateTemperature(+e.target.value));
+    safeInput('#iTemperature', (e: any) => updateTemperature(+e.target.value));
+
+    // Lớp phủ (Overlay)
+    const updateOverlay = (val: string) => {
+      const c = getActiveImageClip();
+      if (!c) return;
+      pushTimelineHistory();
+      c.overlay = val;
+      const mOv = $('#mOverlay') as HTMLSelectElement | null;
+      if (mOv) mOv.value = val;
+      const iOv = $('#iOverlay') as HTMLSelectElement | null;
+      if (iOv) iOv.value = val;
+      refreshAll();
+      toast('Lớp phủ: ' + (OVERLAYS[val] || val));
+    };
+    safeChange('#mOverlay', (e: any) => updateOverlay(e.target.value));
+    safeChange('#iOverlay', (e: any) => updateOverlay(e.target.value));
+
+    // Tông màu filter
+    safeChange('#mColorFilter', (e: any) => {
+      const c = getActiveImageClip();
+      if (!c) return;
+      pushTimelineHistory();
+      c.color = e.target.value;
+      const iCol = $('#iCol') as HTMLSelectElement | null;
+      if (iCol) iCol.value = e.target.value;
+      refreshAll();
+      toast('Tông màu: ' + (COL[c.color] || c.color));
+    });
+
+    // Đặt lại mặc định
+    const resetCurrentPhotoFx = () => {
+      const c = getActiveImageClip();
+      if (!c) return;
+      pushTimelineHistory();
+      c.brightness = 1.0;
+      c.contrast = 1.0;
+      c.saturate = 1.0;
+      c.temperature = 0;
+      c.overlay = 'none';
+      c.color = 'none';
+      refreshAll();
+      updateInspector();
+      toast('Đã đặt lại màu sắc và ánh sáng về mặc định.');
+    };
+    safeClick('#btnResetPhotoFx', resetCurrentPhotoFx);
+    safeClick('#btnResetPhotoFxMini', resetCurrentPhotoFx);
+    safeClick('#btnResetInspPhotoFx', resetCurrentPhotoFx);
+
+    // Áp dụng hiệu ứng hiện tại cho tất cả ảnh
+    safeClick('#btnApplyPhotoFxAll', () => {
+      const cur = getActiveImageClip();
+      if (!cur) return toast('Chưa có clip ảnh nào.');
+      pushTimelineHistory();
+      S.clips.forEach(c => {
+        if (c.type === 'image') {
+          c.fx = cur.fx;
+          c.brightness = cur.brightness;
+          c.contrast = cur.contrast;
+          c.saturate = cur.saturate;
+          c.temperature = cur.temperature;
+          c.overlay = cur.overlay;
+          c.color = cur.color;
+        }
+      });
+      refreshAll();
+      updateInspector();
+      toast('⚡ Đã áp dụng hiệu ứng ảnh & Ken Burns (' + (FX[cur.fx] || cur.fx) + ') cho TẤT CẢ ảnh!');
+    });
+
+    // Áp dụng hiệu ứng ngẫu nhiên cho tất cả ảnh
+    safeClick('#btnRandomPhotoFxAll', () => {
+      const imageClips = S.clips.filter(c => c.type === 'image');
+      if (!imageClips.length) return toast('Chưa có clip ảnh nào trong dự án.');
+      pushTimelineHistory();
+
+      // Danh sách chuyển động Ken Burns phong phú, đẹp mắt
+      const motions = [
+        'zoomin', 'zoomout', 'panl', 'panr', 'panu', 'pand',
+        'pandiag_tl_br', 'pandiag_bl_tr', 'pandiag_tr_bl', 'pandiag_br_tl',
+        'zoomin_fast', 'zoomout_fast', 'zoomin_left', 'zoomin_right', 'zoomout_left', 'zoomout_right'
+      ];
+      // Danh sách lớp phủ nghệ thuật
+      const overlays = ['none', 'none', 'vignette', 'vignette', 'warm_leak', 'cool_neon', 'vintage_grain', 'soft_glow', 'sunset'];
+      // Bộ lọc màu sắc
+      const colors = ['none', 'none', 'none', 'warm', 'cool', 'punch'];
+      // Nhiệt độ màu hài hòa
+      const temps = [-15, -10, -5, 0, 0, 5, 10, 15, 20];
+
+      let lastFx = '';
+      imageClips.forEach(c => {
+        // Luân phiên chuyển động để hai ảnh liền kề không bị trùng lặp, video luôn sinh động
+        const availableMotions = motions.filter(m => m !== lastFx);
+        const chosenFx = availableMotions[Math.floor(Math.random() * availableMotions.length)] || 'zoomin';
+        lastFx = chosenFx;
+        c.fx = chosenFx;
+
+        // Lớp phủ và tông màu
+        c.overlay = overlays[Math.floor(Math.random() * overlays.length)];
+        c.color = colors[Math.floor(Math.random() * colors.length)];
+        c.temperature = temps[Math.floor(Math.random() * temps.length)];
+
+        // Tinh chỉnh nhẹ độ sáng, độ tương phản và bão hòa màu để ảnh sắc nét & có chiều sâu
+        c.brightness = parseFloat((0.96 + Math.random() * 0.10).toFixed(2));
+        c.contrast = parseFloat((0.98 + Math.random() * 0.10).toFixed(2));
+        c.saturate = parseFloat((0.98 + Math.random() * 0.18).toFixed(2));
+      });
+
+      refreshAll();
+      updateInspector();
+      toast(`🎲 Đã áp dụng hiệu ứng chuyển động & lớp phủ ngẫu nhiên cho ${imageClips.length} ảnh!`);
+    });
+
+    // Áp dụng ngẫu nhiên hiệu ứng chuyển động Ken Burns cho các clip ảnh đã chọn
+    safeClick('#btnRandomKenBurnsSelected', () => {
+      // 1. Xác định danh sách clip ảnh mục tiêu đã chọn
+      let targetClips: Clip[] = [];
+      if (S.selectedClipIds && S.selectedClipIds.length > 0) {
+        targetClips = S.clips.filter(c => c.type === 'image' && S.selectedClipIds.includes(c.id));
+      }
+      if (!targetClips.length && S.sel) {
+        const c = selClip();
+        if (c && c.type === 'image') targetClips = [c];
+      }
+      if (!targetClips.length) {
+        const active = getActiveImageClip();
+        if (active) targetClips = [active];
+      }
+      if (!targetClips.length) {
+        return toast('Vui lòng chọn ít nhất một clip ảnh để áp dụng hiệu ứng Ken Burns.');
+      }
+
+      pushTimelineHistory();
+
+      // Danh sách chuyển động Ken Burns phong phú, đẹp mắt
+      const motions = [
+        'zoomin', 'zoomout', 'panl', 'panr', 'panu', 'pand',
+        'pandiag_tl_br', 'pandiag_bl_tr', 'pandiag_tr_bl', 'pandiag_br_tl',
+        'zoomin_fast', 'zoomout_fast', 'zoomin_left', 'zoomin_right', 'zoomout_left', 'zoomout_right'
+      ];
+
+      targetClips.forEach(c => {
+        // Luôn chọn hiệu ứng chuyển động mới khác với hiệu ứng hiện tại của clip
+        const availableMotions = motions.filter(m => m !== c.fx);
+        const chosenFx = availableMotions[Math.floor(Math.random() * availableMotions.length)] || 'zoomin';
+        c.fx = chosenFx;
+      });
+
+      refreshAll();
+      updateInspector();
+
+      if (targetClips.length === 1) {
+        const c = targetClips[0];
+        const clipIdx = S.clips.findIndex(x => x.id === c.id) + 1;
+        const fxLabel = FX[c.fx] || c.fx;
+        toast(`🎲 Đã đổi Ken Burns ngẫu nhiên: ${fxLabel} (Ảnh #${clipIdx})`);
+      } else {
+        toast(`🎲 Đã áp dụng ngẫu nhiên Ken Burns cho ${targetClips.length} clip ảnh đã chọn!`);
+      }
+    });
 
     // xuất
     safeClick('#btnExport', exportVideo);
