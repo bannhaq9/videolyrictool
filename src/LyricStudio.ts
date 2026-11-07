@@ -5,6 +5,7 @@
 import { renderTrimmedAudio, audioBufferToWav, audioBufferToMp3, downloadBlob } from './audioExporter';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 import { alignLyricsWithWhisper, removeVietnameseTones } from './lyricAligner';
+import { getSpectrum } from './audioSpectrum';
 
 declare global {
   interface Window {
@@ -1457,7 +1458,7 @@ export function initStudio() {
       targetCtx.textBaseline = 'middle';
       targetCtx.fillText('Thêm ảnh hoặc video để bắt đầu', W / 2, H / 2);
     }
-    drawVisualizer(t);
+    drawVisualizer(t, targetCtx);
     drawTitle(t);
     drawLyrics(t);
 
@@ -1733,40 +1734,20 @@ export function initStudio() {
   }
 
   /* ---------- hiệu ứng sóng nhạc đa phong cách ---------- */
-  const vizPeakFall = new Float32Array(128);
   const vizPeakSpeed = new Float32Array(128);
 
-  function drawVisualizer(t: number) {
+  function drawVisualizer(t: number, targetCtx: CanvasRenderingContext2D = ctx) {
     const vz = S.viz;
     if (!vz || vz.type === 'none' || !A.loaded || !S.audioBlocks || !S.audioBlocks.length) return;
     const W = cv.width, H = cv.height;
 
-    // Lấy dữ liệu phân tích từ AnalyserNode hoặc mô phỏng nhịp khi tạm dừng / xem trước
-    const isLive = (S.playing || exporting || A.isPreviewing || A.isTrimPreviewing) && !!A.analyser;
-    const binCount = A.analyser ? A.analyser.frequencyBinCount : 128;
-    const freqData = new Uint8Array(binCount);
-    const timeData = new Uint8Array(binCount);
-
-    if (isLive && A.analyser) {
-      A.analyser.getByteFrequencyData(freqData);
-      A.analyser.getByteTimeDomainData(timeData);
-    } else {
-      // Sóng xem trước trực quan sinh động khi đang tạm dừng / tua
-      for (let i = 0; i < binCount; i++) {
-        const p = i / binCount;
-        const bassWave = Math.sin(t * 3.6) * 0.35 + 0.65;
-        const wave = Math.sin(i * 0.22 + t * 4.2) * 0.35 + 0.65;
-        const decay = Math.pow(Math.max(0.01, 1 - p), 0.72);
-        freqData[i] = Math.min(255, Math.floor(210 * decay * wave * bassWave));
-        timeData[i] = Math.floor(128 + Math.sin(i * 0.14 + t * 4.8) * 42 * Math.sin(p * Math.PI));
-      }
-    }
-
-    // Tính toán năng lượng dải trầm (Bass Energy) để tạo độ nảy / rung chấn
-    let bassSum = 0;
-    const bassBins = Math.min(8, binCount);
-    for (let b = 0; b < bassBins; b++) bassSum += freqData[b];
-    const bassAvg = (bassSum / (bassBins * 255)) * vz.sens;
+    // Lấy dữ liệu phổ & sóng xác định từ AudioBuffer (đồng nhất 100% cho preview và xuất video offline)
+    const spec = getSpectrum(t, A.buffer, S.audioBlocks, vz.sens);
+    const binCount = 128;
+    const freqData = spec.freqData;
+    const timeData = spec.timeData;
+    const bassAvg = spec.bassAvg;
+    const vizPeakFall = spec.peakFall;
 
     ctx.save();
 
